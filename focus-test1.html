@@ -1,0 +1,863 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>跟踪对焦实验台</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+/* Layout: 取景器为主角（左），右侧是像相机菜单一样的参数面板；下方是距离曲线与对比实验 */
+:root {
+  --bg: #eef2f0;
+  --panel: #ffffff;
+  --sunk: #e3e9e6;
+  --ink: #18211e;
+  --muted: #5a6863;
+  --line: #d2dbd7;
+  --accent: #17834a;          /* 相机合焦确认的绿色 */
+  --accent-soft: rgba(23,131,74,.14);
+  --warn: #b86400;
+  --bad: #c3302a;
+  --subj: #2a66d6;            /* 主体真实距离 */
+  --focus: #d07a06;           /* 镜头对焦位置 */
+  --shade: rgba(60,75,70,.13);
+  --font-display: "Barlow Semi Condensed", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101514; --panel: #18201e; --sunk: #222b29; --ink: #e2eae6; --muted: #91a09a; --line: #2c3734;
+    --accent: #3fcd7c; --accent-soft: rgba(63,205,124,.16); --warn: #f0a23a; --bad: #ff6a5c;
+    --subj: #74a2ff; --focus: #f3a53c; --shade: rgba(200,220,210,.09); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101514; --panel: #18201e; --sunk: #222b29; --ink: #e2eae6; --muted: #91a09a; --line: #2c3734;
+  --accent: #3fcd7c; --accent-soft: rgba(63,205,124,.16); --warn: #f0a23a; --bad: #ff6a5c;
+  --subj: #74a2ff; --focus: #f3a53c; --shade: rgba(200,220,210,.09); color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 14px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 40px;
+}
+.wrap { max-width: 1260px; margin: 0 auto; display: grid; gap: 18px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 20px; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(25px, 6vw, 30px); letter-spacing: .01em; margin: 0; text-wrap: balance; }
+@media (max-width: 520px) { h1 small { display: block; margin-left: 0 !important; } }
+h1 small { font-family: var(--font-mono); font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 10px; letter-spacing: .08em; }
+header p { margin: 0; color: var(--muted); max-width: 62ch; }
+h2 { font-family: var(--font-display); font-weight: 600; font-size: 19px; margin: 0; letter-spacing: .02em; }
+.label { font-family: var(--font-display); font-weight: 600; font-size: 12.5px; letter-spacing: .1em; color: var(--muted); text-transform: uppercase; }
+
+.main { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 920px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.col { display: grid; gap: 14px; min-width: 0; }
+
+.vf { position: relative; background: #0b0d0c; border-radius: 10px; overflow: hidden; }
+.vf canvas { display: block; width: 100%; height: auto; }
+.transport { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+button, .seg label {
+  font-family: var(--font-display); font-weight: 600; font-size: 14px; letter-spacing: .03em;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 7px;
+  padding: 6px 12px; cursor: pointer; line-height: 1.3;
+}
+button:hover, .seg label:hover { border-color: var(--muted); }
+button:focus-visible, input:focus-visible + span, .seg input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; min-width: 88px; }
+:root[data-theme="dark"] button.primary { color: #0c1410; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) button.primary { color: #0c1410; } }
+.transport .spacer { flex: 1; }
+.chip { font-family: var(--font-display); font-weight: 600; font-size: 13px; padding: 3px 10px; border-radius: 99px; background: var(--sunk); color: var(--muted); letter-spacing: .04em; white-space: nowrap; }
+.chip.ok { background: var(--accent-soft); color: var(--accent); }
+.chip.warn { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.chip.bad { background: color-mix(in srgb, var(--bad) 15%, transparent); color: var(--bad); }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 10px; min-width: 0; }
+.chart canvas { display: block; width: 100%; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--muted); }
+.legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+.legend i.band { height: 10px; opacity: .5; }
+
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 520px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.stat { display: grid; gap: 2px; }
+.stat b { font-family: var(--font-mono); font-weight: 600; font-size: 21px; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.stat span { font-size: 12px; color: var(--muted); }
+
+.ctrl { display: grid; gap: 4px; }
+.ctrl .row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.ctrl output { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.ctrl .hint { font-size: 12px; color: var(--muted); line-height: 1.45; }
+input[type=range] { width: 100%; accent-color: var(--accent); margin: 2px 0; }
+.ticks { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); margin-top: -2px; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label { font-size: 13.5px; padding: 5px 10px; }
+.seg input:checked + label { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.switch { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.switch input { position: absolute; opacity: 0; }
+.switch span { width: 38px; height: 22px; border-radius: 99px; background: var(--sunk); border: 1px solid var(--line); position: relative; flex: none; transition: background .15s; }
+.switch span::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--muted); transition: transform .15s, background .15s; }
+.switch input:checked + span { background: var(--accent-soft); border-color: var(--accent); }
+.switch input:checked + span::after { transform: translateX(16px); background: var(--accent); }
+.desc { font-size: 13px; color: var(--muted); margin: 0; }
+.checks { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); }
+.checks label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.checks input { accent-color: var(--accent); }
+
+.log { font-family: var(--font-mono); font-size: 12px; max-height: 210px; overflow-y: auto; display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.log li { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 8px; color: var(--muted); }
+.log li b { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.log li.k-bad span { color: var(--bad); }
+.log li.k-warn span { color: var(--warn); }
+.log li.k-ok span { color: var(--accent); }
+.log span { font-family: var(--font-body); }
+
+.lower { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 920px) { .lower { grid-template-columns: minmax(0, 1fr); } }
+.steps { margin: 0; padding-left: 1.3em; display: grid; gap: 6px; color: var(--ink); }
+.steps li::marker { font-family: var(--font-mono); color: var(--muted); }
+.steps b { font-weight: 700; }
+.exp { display: grid; gap: 8px; }
+.exp button { text-align: left; display: grid; gap: 2px; padding: 9px 12px; }
+.exp button span { font-family: var(--font-body); font-weight: 400; font-size: 12.5px; color: var(--muted); letter-spacing: 0; }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; min-width: 420px; }
+th, td { padding: 7px 8px; text-align: center; border-bottom: 1px solid var(--line); font-size: 13px; }
+th { font-family: var(--font-display); font-weight: 600; color: var(--muted); letter-spacing: .03em; }
+td.cell { font-family: var(--font-mono); }
+td.cell small { display: block; font-size: 11px; color: var(--muted); }
+td.cur { outline: 2px solid var(--accent); outline-offset: -2px; }
+.note { font-size: 12.5px; color: var(--muted); margin: 0; }
+@media (prefers-reduced-motion: reduce) { .switch span, .switch span::after { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>跟踪对焦实验台 <small>AF-C · 60 Hz SIM</small></h1>
+    <p>没有相机也能研究跟踪对焦：场景、镜头、相位对焦传感器和 AI 识别全部是模拟的。改动右侧参数，看对焦框和距离曲线怎么变。</p>
+  </header>
+
+  <div class="main">
+    <div class="col">
+      <div class="vf"><canvas id="vf" width="800" height="450" aria-label="模拟取景器画面"></canvas></div>
+      <div class="transport">
+        <button id="play" class="primary">暂停</button>
+        <button id="restart">从头开始</button>
+        <button id="stepbtn">单帧</button>
+        <div class="seg" role="radiogroup" aria-label="播放速度">
+          <input type="radio" name="rate" id="r025" value="0.25"><label for="r025">0.25×</label>
+          <input type="radio" name="rate" id="r05" value="0.5"><label for="r05">0.5×</label>
+          <input type="radio" name="rate" id="r1" value="1" checked><label for="r1">1×</label>
+        </div>
+        <span class="spacer"></span>
+        <span id="statusChip" class="chip ok">跟踪中</span>
+      </div>
+      <div class="checks">
+        <label><input type="checkbox" id="showPred" checked>预测位置（十字）</label>
+        <label><input type="checkbox" id="showCands" checked>候选目标与得分</label>
+        <label><input type="checkbox" id="showGhost" checked>透视被挡住的主体</label>
+      </div>
+
+      <div class="card chart">
+        <div class="row" style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">
+          <h2>距离曲线</h2>
+          <span class="label">对数刻度 · 米</span>
+        </div>
+        <canvas id="tl" height="210" aria-label="主体距离与对焦距离随时间变化"></canvas>
+        <div class="legend">
+          <span><i style="background:var(--subj)"></i>主体真实距离</span>
+          <span><i style="background:var(--focus)"></i>镜头对焦距离</span>
+          <span><i class="band" style="background:var(--subj)"></i>合焦范围</span>
+          <span><i class="band" style="background:var(--muted)"></i>主体被挡住</span>
+          <span><i style="background:var(--bad);height:6px"></i>跟错目标</span>
+        </div>
+        <canvas id="scale" height="58" aria-label="镜头对焦距离刻度"></canvas>
+      </div>
+
+      <div class="card">
+        <div class="stats">
+          <div class="stat"><b id="sFocus">—</b><span>合焦率（主体露出时）</span></div>
+          <div class="stat"><b id="sWrong">—</b><span>跟错目标时间</span></div>
+          <div class="stat"><b id="sFirst">—</b><span>首次合焦</span></div>
+          <div class="stat"><b id="sRecov">—</b><span>被挡后恢复（平均）</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card">
+        <span class="label">场景</span>
+        <div class="seg" id="sceneSeg" role="radiogroup" aria-label="场景"></div>
+        <p class="desc" id="sceneDesc"></p>
+      </div>
+
+      <div class="card">
+        <span class="label">跟踪算法</span>
+        <div class="ctrl">
+          <div class="row"><label for="sens">跟踪灵敏度</label><output id="sensOut"></output></div>
+          <input type="range" id="sens" min="1" max="5" step="1" value="3">
+          <div class="ticks"><span>1 黏（多等）</span><span>5 灵敏（快换）</span></div>
+          <div class="hint">主体跟丢或被挡住后，最多等多久才换目标。</div>
+        </div>
+        <div class="ctrl">
+          <span>运动预测</span>
+          <div class="seg" role="radiogroup" aria-label="运动预测">
+            <input type="radio" name="pred" id="p0" value="0"><label for="p0">不预测</label>
+            <input type="radio" name="pred" id="p1" value="1"><label for="p1">匀速</label>
+            <input type="radio" name="pred" id="p2" value="2" checked><label for="p2">匀速 + 加速度</label>
+          </div>
+          <div class="hint">预测主体下一刻的位置和距离，给镜头留出提前量。</div>
+        </div>
+        <label class="switch" for="ai"><input type="checkbox" id="ai" checked><span></span>AI 主体识别</label>
+        <div class="hint" style="font-size:12px;color:var(--muted);margin-top:-4px">关闭后只靠颜色图案和距离跟踪，类似经典的 3D 跟踪。</div>
+      </div>
+
+      <div class="card">
+        <span class="label">相机与环境</span>
+        <div class="ctrl">
+          <div class="row"><label for="motor">对焦马达速度</label><output id="motorOut"></output></div>
+          <input type="range" id="motor" min="0.2" max="2" step="0.1" value="0.8">
+        </div>
+        <div class="ctrl">
+          <div class="row"><label for="lat">系统延迟</label><output id="latOut"></output></div>
+          <input type="range" id="lat" min="0" max="150" step="10" value="50">
+        </div>
+        <div class="ctrl">
+          <div class="row"><label for="light">光线</label><output id="lightOut"></output></div>
+          <input type="range" id="light" min="1" max="5" step="1" value="1">
+          <div class="ticks"><span>明亮</span><span>很暗（测距噪声大）</span></div>
+        </div>
+        <div class="ctrl">
+          <div class="row"><label for="speed">主体速度</label><output id="speedOut"></output></div>
+          <input type="range" id="speed" min="0.5" max="1.6" step="0.1" value="1">
+        </div>
+        <p class="note">改动任何参数都会从头重新运行。随机种子固定，同样的设置结果可以复现。</p>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
+          <span class="label">事件记录</span><span class="note" id="tNow">0.00 s</span>
+        </div>
+        <ul class="log" id="log"></ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="lower">
+    <div class="card">
+      <h2>对比实验</h2>
+      <p class="note">用当前场景和其他设置，把 5 档灵敏度 × 3 种预测全部跑一遍（每格 2 次取平均）。格子里大数字是合焦率，小字是跟错目标的比例；框出的是当前设置。</p>
+      <div><button id="cmpBtn">运行对比</button></div>
+      <div class="tablewrap" id="cmp"></div>
+    </div>
+    <div class="card">
+      <h2>试试这些实验</h2>
+      <div class="exp" id="exps"></div>
+      <h2 style="margin-top:6px">每一帧发生了什么</h2>
+      <ol class="steps">
+        <li><b>预测</b>：按上一帧的速度，推算主体这一帧在哪、离多远。</li>
+        <li><b>找人</b>：给每个候选打分 = 外观像不像 × 位置近不近 × 距离对不对。</li>
+        <li><b>更新或等待</b>：找到就更新位置和外观档案；找不到就按预测“盲追”，等待时间由灵敏度决定，等不到就重新捕获（可能抓错）。</li>
+        <li><b>距离闸门</b>：测到的距离突然大变，多半是障碍物，先不跟；等太久才接受。</li>
+        <li><b>提前量</b>：按距离变化速度，把镜头推到“延迟之后”主体会在的位置。</li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+// ============================================================ 模型（与 Python 版 af_sim.py 相同）
+const W = 800, H = 450, FPS = 60, DT = 1 / FPS, BG_DIST = 80, BG = [138, 160, 128];
+const TOL = 0.006, BLUR_K = 450, MAX_BLUR = 14, MIN_FD = 1.5, BASE_NOISE = 0.0015;
+const PATIENCE = {1: 60, 2: 36, 3: 18, 4: 8, 5: 2};
+const NOISE_LIGHT = {1: 1, 2: 1.6, 3: 2.4, 4: 3.5, 5: 5};
+const LIGHT_NAME = {1: '明亮', 2: '阴天', 3: '室内', 4: '黄昏', 5: '很暗'};
+const SUBJ = [214, 72, 56], DIST = [200, 88, 66], POLE = [92, 72, 52];
+const ACCEPT = 0.12, SIG_C = 25, GATE = 0.015;
+const sin = Math.sin;
+
+const SCENES = {
+  occlusion: { title: '鸟穿过柱子', dur: 8, desc: '主体从左飞到右，中途两次被近处的柱子完全挡住。测试“被挡住时要不要等”。', objs: [
+    { name: '主体（鸟）', kind: 'subject', color: SUBJ, shape: 'circle', rRef: 26, path: t => [60 + 92 * t, 210 + 28 * sin(1.6 * t), 18 + 3 * sin(0.7 * t)] },
+    { name: '柱子 A', kind: 'occluder', color: POLE, shape: 'rect', rect: [270, 0, 335, H], z: 7 },
+    { name: '柱子 B', kind: 'occluder', color: POLE, shape: 'rect', rect: [520, 0, 560, H], z: 6 } ] },
+  crossing: { title: '两人交错', dur: 7, desc: '主体向右跑，一个衣服颜色几乎一样的人从更近处向左跑过，短暂挡住主体。测试“会不会认错人”。', objs: [
+    { name: '主体（球员）', kind: 'subject', color: SUBJ, shape: 'circle', rRef: 30, path: t => [110 + 85 * t, 255 + 6 * sin(2 * t), 12 - 0.35 * t] },
+    { name: '对手', kind: 'distractor', color: DIST, shape: 'circle', rRef: 30, path: t => [720 - 95 * t, 245 + 5 * sin(2.4 * t + 1), 8] } ] },
+  approach: { title: '冲向镜头的运动员', dur: 7, desc: '主体从 45 米外加速冲到 5 米处，越近距离变化越快。测试“运动预测（提前量）”。', objs: [
+    { name: '主体（运动员）', kind: 'subject', color: SUBJ, shape: 'circle', rRef: 30, path: t => [400 + 140 * sin(0.8 * t), 240 + 8 * sin(4 * t), 45 - 40 * Math.pow(Math.min(t, 7) / 7, 1.7)] },
+    { name: '远处队员', kind: 'distractor', color: DIST, shape: 'circle', rRef: 30, path: t => [720 - 15 * t, 300 + 4 * sin(3 * t), 30 + 1.5 * t] } ] },
+  erratic: { title: '树林里乱飞的鸟', dur: 9, desc: '主体忽左忽右、忽远忽近，前面有树枝，远处还有另一只鸟。综合测试。', objs: [
+    { name: '主体（鸟）', kind: 'subject', color: SUBJ, shape: 'circle', rRef: 26, path: t => [400 + 250 * sin(0.55 * t) + 45 * sin(2.1 * t), 210 + 85 * sin(0.8 * t + 1) + 25 * sin(2.9 * t), 20 + 7 * sin(0.45 * t) + 2.5 * sin(1.9 * t)] },
+    { name: '另一只鸟', kind: 'distractor', color: DIST, shape: 'circle', rRef: 26, path: t => [820 - 70 * t, 95 + 20 * sin(1.3 * t), 45] },
+    { name: '树枝 1', kind: 'occluder', color: POLE, shape: 'rect', rect: [185, 0, 200, H], z: 5.5 },
+    { name: '树枝 2', kind: 'occluder', color: POLE, shape: 'rect', rect: [0, 318, 520, 330], z: 6 },
+    { name: '树枝 3', kind: 'occluder', color: POLE, shape: 'rect', rect: [610, 0, 624, H], z: 7 } ] },
+};
+
+function mkRng(seed) {
+  let a = seed >>> 0, spare = null;
+  const u = () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const n = (m, s) => {
+    if (spare !== null) { const v = spare; spare = null; return m + s * v; }
+    let u1 = 0; while (u1 === 0) u1 = u();
+    const u2 = u(), r = Math.sqrt(-2 * Math.log(u1));
+    spare = r * Math.sin(2 * Math.PI * u2);
+    return m + s * r * Math.cos(2 * Math.PI * u2);
+  };
+  return { u, n };
+}
+
+function sceneStates(sc, t) {
+  return sc.objs.map((o, i) => {
+    if (o.shape === 'circle') { const [x, y, z] = o.path(t); return { idx: i, name: o.name, kind: o.kind, color: o.color, z, shape: 'circle', x, y, r: o.rRef * 10 / z }; }
+    return { idx: i, name: o.name, kind: o.kind, color: o.color, z: o.z, shape: 'rect', rect: o.rect, x: (o.rect[0] + o.rect[2]) / 2, y: (o.rect[1] + o.rect[3]) / 2, r: 0 };
+  });
+}
+const animate = s => s.kind === 'subject' || s.kind === 'distractor';
+function contains(s, px, py) {
+  if (s.shape === 'circle') return (px - s.x) ** 2 + (py - s.y) ** 2 <= s.r * s.r;
+  const [x0, y0, x1, y1] = s.rect; return px >= x0 && px <= x1 && py >= y0 && py <= y1;
+}
+function depthAt(st, px, py) { let b = null; for (const s of st) if (contains(s, px, py) && (!b || s.z < b.z)) b = s; return b; }
+const DISK = [[0, 0]];
+for (let k = 0; k < 8; k++) DISK.push([0.5 * Math.cos(2 * Math.PI * k / 8), 0.5 * Math.sin(2 * Math.PI * k / 8)]);
+for (let k = 0; k < 16; k++) DISK.push([0.9 * Math.cos(2 * Math.PI * k / 16), 0.9 * Math.sin(2 * Math.PI * k / 16)]);
+function visibility(st, o) {
+  if (o.shape !== 'circle') return [1, o.x, o.y];
+  let n = 0, sx = 0, sy = 0;
+  for (const [ux, uy] of DISK) {
+    const px = o.x + ux * o.r, py = o.y + uy * o.r;
+    if (px < 0 || px >= W || py < 0 || py >= H) continue;
+    let hid = false; for (const s of st) if (s !== o && s.z < o.z && contains(s, px, py)) { hid = true; break; }
+    if (hid) continue; n++; sx += px; sy += py;
+  }
+  return n ? [n / DISK.length, sx / n, sy / n] : [0, o.x, o.y];
+}
+
+class Lens {
+  constructor(D0, vmax, lat) { this.D = D0; this.vmax = vmax; this.q = Array(lat).fill(D0); this.target = D0; }
+  command(d) { this.q.push(d); this.target = this.q.shift(); }
+  step() { const m = this.vmax * DT; this.D += Math.max(-m, Math.min(m, this.target - this.D)); this.D = Math.max(0, Math.min(1 / MIN_FD, this.D)); }
+}
+
+// 相位对焦：测量方框内占比最大的物体相对当前对焦位置的偏差（含噪声）
+function pdaf(st, lensD, cx, cy, half, noise, rng) {
+  const counts = new Map();
+  for (let i = 0; i < 7; i++) for (let j = 0; j < 7; j++) {
+    const o = depthAt(st, cx - half + i * half / 3, cy - half + j * half / 3);
+    const k = o ? o.idx : -1;
+    if (!counts.has(k)) counts.set(k, { c: 0, z: o ? o.z : BG_DIST });
+    counts.get(k).c++;
+  }
+  let best = null, bk = -1;
+  for (const [k, v] of counts) if (!best || v.c > best.c || (v.c === best.c && v.z < best.z)) { best = v; bk = k; }
+  const def = 1 / best.z - lensD, sd = noise * (1 + 8 * Math.abs(def));
+  return { D: lensD + def + rng.n(0, sd), key: bk, sd };
+}
+
+function candidates(st, px, py, rNow, useAI, rng) {
+  const out = [];
+  for (const o of st) {
+    if (!animate(o)) continue;
+    const [frac, cx, cy] = visibility(st, o);
+    let p, cn, src;
+    if (useAI) { if (frac < 0.3 || o.r < 4) continue; p = Math.min(0.97, 0.2 + (frac - 0.3) / 0.3); cn = 5; src = 'ai'; }
+    else { if (frac < 0.55) continue; p = 0.9; cn = 10; src = 'pattern'; }
+    if (rng.u() > p) continue;
+    out.push({ x: cx + rng.n(0, 1.5), y: cy + rng.n(0, 1.5), r: o.r, color: o.color.map(c => c + rng.n(0, cn)), source: src, trueIdx: o.idx });
+  }
+  const qx = Math.min(Math.max(px, 0), W - 1), qy = Math.min(Math.max(py, 0), H - 1);
+  const o = depthAt(st, qx, qy);
+  if (!o || !animate(o)) {
+    const col = o ? o.color : BG;
+    out.push({ x: qx, y: qy, r: rNow, color: col.map(c => c + rng.n(0, 8)), source: 'patch', trueIdx: o ? o.idx : -1 });
+  }
+  return out;
+}
+const cdist2 = (a, b) => (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2;
+
+class Tracker {
+  constructor(cfg, rng) {
+    this.cfg = cfg; this.rng = rng; this.patience = PATIENCE[cfg.sens];
+    this.noise = BASE_NOISE * NOISE_LIGHT[cfg.light];
+    this.lead = (cfg.latF + 1) * DT; this.status = 'tracking';
+  }
+  measure(st, lensD, x, y, r) { return pdaf(st, lensD, x, y, Math.max(3, 0.45 * r), this.noise, this.rng); }
+  start(st, x, y, color, r, lensD) {
+    Object.assign(this, { x, y, vx: 0, vy: 0, tpl: color.slice(), r, lost: 0, obstacle: 0, onAI: this.cfg.ai });
+    this.D = this.measure(st, lensD, x, y, r).D; this.vD = 0; this.aD = 0;
+  }
+  predictD() { const p = this.cfg.pred; if (p === 0) return this.D; if (p === 1) return this.D + this.vD * DT; return this.D + this.vD * DT + 0.5 * this.aD * DT * DT; }
+  updateD(meas, Dp) {
+    const r = meas - Dp, p = this.cfg.pred;
+    if (p === 0) this.D = Dp + 0.6 * r;
+    else if (p === 1) { this.D = Dp + 0.55 * r; this.vD += 0.12 * r / DT; }
+    else { const vp = this.vD + this.aD * DT; this.D = Dp + 0.6 * r; this.vD = vp + 0.15 * r / DT; this.aD += 2 * 0.001 * r / (DT * DT); }
+  }
+  resetD(m) { this.D = m; this.vD = 0; this.aD = 0; this.obstacle = 0; }
+  update(st, lensD) {
+    const cfg = this.cfg, ev = [];
+    // ① 预测
+    let px = this.x, py = this.y;
+    if (cfg.pred >= 1) { px += this.vx * DT; py += this.vy * DT; }
+    const Dp = this.predictD();
+    // ② 候选打分
+    const cands = candidates(st, px, py, this.r, cfg.ai, this.rng);
+    const sigS = 22 + 1.2 * this.r + 6 * this.lost;
+    let best = null;
+    for (const c of cands) {
+      const m = this.measure(st, lensD, c.x, c.y, c.r); c.D = m.D; c.sd = m.sd;
+      c.app = Math.exp(-cdist2(c.color, this.tpl) / (2 * SIG_C * SIG_C));
+      c.sp = Math.exp(-((c.x - px) ** 2 + (c.y - py) ** 2) / (2 * sigS * sigS));
+      const sdd = 0.006 + 2 * c.sd;
+      c.dep = Math.exp(-((c.D - Dp) ** 2) / (2 * sdd * sdd));
+      c.score = c.app * c.sp * c.dep;
+      if (!best || c.score > best.score) best = c;
+    }
+    let acc = null, switched = false, measD = null, measSd = 0;
+    let dets = [];
+    if (cfg.ai && !this.onAI) dets = cands.filter(c => c.source === 'ai' && Math.hypot(c.x - px, c.y - py) < 150);
+    if (dets.length) {
+      acc = dets.reduce((a, b) => Math.hypot(a.x - px, a.y - py) <= Math.hypot(b.x - px, b.y - py) ? a : b);
+      switched = true; ev.push(['ai_takeover', acc.trueIdx]);
+    } else if (best && best.score > ACCEPT) acc = best;
+
+    if (acc) {
+      if (this.lost >= 3 && !switched) ev.push(['reacquired', acc.trueIdx]);
+      this.lost = 0;
+      if (switched) { this.x = acc.x; this.y = acc.y; this.vx = 0; this.vy = 0; this.tpl = acc.color.slice(); this.resetD(acc.D); }
+      else {
+        if (cfg.pred >= 1) { const rx = acc.x - px, ry = acc.y - py; this.x = px + 0.6 * rx; this.y = py + 0.6 * ry; this.vx += 0.2 * rx / DT; this.vy += 0.2 * ry / DT; }
+        else { this.x = acc.x; this.y = acc.y; }
+        this.tpl = this.tpl.map((v, i) => 0.95 * v + 0.05 * acc.color[i]);
+        measD = acc.D; measSd = acc.sd;
+      }
+      if (acc.r) this.r = 0.8 * this.r + 0.2 * acc.r;
+      this.onAI = acc.source === 'ai'; this.status = 'tracking';
+    } else {
+      this.lost++;
+      if (this.lost === 3) ev.push(['lost', -1]);
+      if (this.lost > this.patience) {
+        let pool = cands;
+        if (cfg.ai && cands.some(c => c.source === 'ai')) pool = cands.filter(c => c.source === 'ai');
+        if (pool.length) {
+          const s2 = c => (0.3 + c.app) * Math.exp(-((c.x - px) ** 2 + (c.y - py) ** 2) / (2 * 120 * 120));
+          const c = pool.reduce((a, b) => s2(a) >= s2(b) ? a : b);
+          this.x = c.x; this.y = c.y; this.vx = 0; this.vy = 0; this.tpl = c.color.slice();
+          if (c.r) this.r = c.r;
+          this.onAI = c.source === 'ai'; this.lost = 0; this.resetD(c.D); switched = true; this.status = 'tracking';
+          ev.push(['reacquire_new', c.trueIdx]);
+        }
+      } else {
+        this.x = px; this.y = py; if (cfg.pred === 0) { this.vx = 0; this.vy = 0; }
+        const m = this.measure(st, lensD, px, py, this.r); measD = m.D; measSd = m.sd;
+        this.status = 'coasting';
+      }
+    }
+    // ④ 距离闸门
+    if (!switched && measD !== null) {
+      const innov = measD - Dp, gate = GATE + 3 * measSd;
+      if (Math.abs(innov) > gate) {
+        this.obstacle++;
+        if (this.obstacle === 1) ev.push(['depth_hold', -1]);
+        if (this.obstacle > this.patience) { this.resetD(measD); ev.push(['depth_jump', -1]); }
+        else { this.D = Dp; if (this.status === 'tracking') this.status = 'holding'; }
+      } else { this.obstacle = 0; this.updateD(measD, Dp); }
+    } else if (!switched) this.D = Dp;
+    // ⑤ 提前量
+    let cmd = this.D;
+    if (cfg.pred >= 1) cmd += this.vD * this.lead;
+    if (cfg.pred >= 2) cmd += 0.5 * this.aD * this.lead * this.lead;
+    cmd = Math.max(0, Math.min(1 / MIN_FD, cmd));
+    return { cmd, info: { px, py, cands, ev } };
+  }
+}
+
+class Sim {
+  constructor(key, cfg, seed = 1) {
+    this.key = key; this.sc = SCENES[key];
+    this.cfg = Object.assign({}, cfg, { latF: Math.round(cfg.lat / 1000 * FPS) });
+    this.rng = mkRng(seed);
+    this.N = Math.floor(this.sc.dur / cfg.speed * FPS); this.f = 0;
+    this.lens = new Lens(1 / 5, cfg.motor, this.cfg.latF);
+    this.tr = new Tracker(this.cfg, this.rng);
+    this.log = { t: [], sz: [], fD: [], vis: [], inf: [], on: [] };
+    this.events = []; this.frame = null;
+  }
+  get done() { return this.f >= this.N; }
+  step() {
+    if (this.done) return;
+    const t = this.f * DT, st = sceneStates(this.sc, t * this.cfg.speed), subj = st.find(s => s.kind === 'subject');
+    if (this.f === 0) this.tr.start(st, subj.x + 4, subj.y - 3, subj.color.map(c => c + this.rng.n(0, 5)), subj.r, this.lens.D);
+    const { cmd, info } = this.tr.update(st, this.lens.D);
+    this.lens.command(cmd); this.lens.step();
+    const [vis] = visibility(st, subj), sD = 1 / subj.z;
+    const inf = Math.abs(this.lens.D - sD) < TOL;
+    const on = Math.hypot(this.tr.x - subj.x, this.tr.y - subj.y) < Math.max(12, 1.3 * subj.r);
+    const L = this.log; L.t.push(t); L.sz.push(subj.z); L.fD.push(this.lens.D); L.vis.push(vis); L.inf.push(inf); L.on.push(on);
+    for (const [e, idx] of info.ev) this.events.push({ t, e, name: idx < 0 ? '背景' : st[idx].name, kind: idx < 0 ? 'bg' : st[idx].kind });
+    this.frame = { t, st, subj, vis, inf, on, lensD: this.lens.D, tx: this.tr.x, ty: this.tr.y, tr: this.tr.r, px: info.px, py: info.py, cands: info.cands, status: this.tr.status, lost: this.tr.lost, obstacle: this.tr.obstacle, patience: this.tr.patience };
+    this.f++;
+  }
+  metrics() {
+    const L = this.log, n = L.t.length;
+    let valid = 0, inf = 0, wrong = 0, first = NaN;
+    const rec = [];
+    for (let i = 0; i < n; i++) {
+      const v = L.vis[i] >= 0.5;
+      if (v) { valid++; if (L.inf[i]) { inf++; if (isNaN(first)) first = L.t[i]; } if (!L.on[i]) wrong++; }
+      if (i > 0 && v && L.vis[i - 1] < 0.5) {
+        let j = i; while (j < n && !(L.inf[j] && L.vis[j] >= 0.5)) j++;
+        rec.push(j < n ? (j - i) * DT : NaN);
+      }
+    }
+    const good = rec.filter(r => !isNaN(r));
+    return { focus: valid ? inf / valid : NaN, wrongT: wrong * DT, wrongF: valid ? wrong / valid : 0, first,
+      recov: good.length ? good.reduce((a, b) => a + b, 0) / good.length : NaN, occl: rec.length, never: rec.length - good.length, valid };
+  }
+}
+
+// ============================================================ UI
+const $ = id => document.getElementById(id);
+const vf = $('vf'), vctx = vf.getContext('2d');
+const tl = $('tl'), sc = $('scale');
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function cfgFromUI() {
+  return {
+    sens: +$('sens').value, pred: +document.querySelector('input[name=pred]:checked').value, ai: $('ai').checked,
+    motor: +$('motor').value, lat: +$('lat').value, light: +$('light').value, speed: +$('speed').value,
+  };
+}
+let sceneKey = 'occlusion', sim, playing = !reduce, rate = 1, acc = 0, last = null, subjPath = [];
+const segEl = $('sceneSeg');
+for (const [k, s] of Object.entries(SCENES)) {
+  segEl.insertAdjacentHTML('beforeend', `<input type="radio" name="scene" id="sc_${k}" value="${k}"${k === sceneKey ? ' checked' : ''}><label for="sc_${k}">${s.title}</label>`);
+}
+
+function updateOutputs() {
+  const c = cfgFromUI();
+  $('sensOut').textContent = `${c.sens} · 最多等 ${Math.round(PATIENCE[c.sens] / FPS * 1000)} ms`;
+  $('motorOut').textContent = `${c.motor.toFixed(1)} 屈光度/秒`;
+  $('latOut').textContent = `${c.lat} ms`;
+  $('lightOut').textContent = `${LIGHT_NAME[c.light]} · 噪声 ×${NOISE_LIGHT[c.light]}`;
+  $('speedOut').textContent = `×${c.speed.toFixed(1)}`;
+  $('sceneDesc').textContent = SCENES[sceneKey].desc;
+}
+
+function restart(keepPlay = true) {
+  const cfg = cfgFromUI();
+  sim = new Sim(sceneKey, cfg, 1);
+  // 预先算出主体整段的距离，用来固定坐标轴，并画出“未来路线”
+  subjPath = [];
+  for (let f = 0; f < sim.N; f++) { const t = f * DT; const s = sceneStates(sim.sc, t * cfg.speed).find(o => o.kind === 'subject'); subjPath.push(s.z); }
+  sim.step();
+  if (!keepPlay) playing = false;
+  acc = 0; logShown = 0; $('log').innerHTML = '';
+  if (reduce && !keepPlay) { /* 静止 */ }
+  updateOutputs(); renderAll(true);
+  setPlayLabel();
+}
+function setPlayLabel() { $('play').textContent = sim.done ? '重播' : (playing ? '暂停' : '播放'); }
+
+// ---------------- 取景器绘制
+const blobs = (() => { const r = mkRng(7), out = []; for (let i = 0; i < 70; i++) { const dl = r.n(0, 16); out.push({ x: r.u() * W, y: r.u() * H, r: 10 + r.u() * 37, c: BG.map(v => Math.round(Math.min(255, Math.max(0, v + dl + r.n(0, 4))))) }); } return out; })();
+const bgCache = new Map();
+const rgb = c => `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`;
+// 用阴影实现模糊：在所有浏览器上都能用
+function blurDraw(ctx, blur, color, path) {
+  if (blur < 0.3) { ctx.fillStyle = color; path(0); ctx.fill(); return; }
+  ctx.save(); ctx.shadowColor = color; ctx.shadowBlur = blur; ctx.shadowOffsetX = 10000; ctx.fillStyle = color;
+  path(-10000); ctx.fill(); ctx.restore();
+}
+function bgFor(blur) {
+  const q = Math.round(blur * 2) / 2;
+  if (bgCache.has(q)) return bgCache.get(q);
+  const c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d');
+  x.fillStyle = rgb(BG); x.fillRect(0, 0, W, H);
+  for (const b of blobs) blurDraw(x, q, rgb(b.c), o => { x.beginPath(); x.arc(b.x + o, b.y, b.r, 0, Math.PI * 2); });
+  bgCache.set(q, c); return c;
+}
+const blurOf = (z, D) => Math.min(MAX_BLUR, BLUR_K * Math.abs(1 / z - D));
+const STATUS = { tracking: ['跟踪中', 'ok'], coasting: ['盲追中', 'warn'], holding: ['忽略障碍物', 'warn'] };
+
+function drawVF() {
+  const fr = sim.frame; if (!fr) return;
+  const ctx = vctx, D = fr.lensD;
+  ctx.drawImage(bgFor(blurOf(BG_DIST, D)), 0, 0);
+  const st = fr.st.slice().sort((a, b) => b.z - a.z);
+  for (const s of st) {
+    const b = blurOf(s.z, D);
+    if (s.shape === 'circle') {
+      blurDraw(ctx, b, rgb(s.color), o => { ctx.beginPath(); ctx.arc(s.x + o, s.y, s.r, 0, Math.PI * 2); });
+      const er = Math.max(1.5, 0.18 * s.r), ex = s.x + 0.35 * s.r, ey = s.y - 0.25 * s.r;
+      blurDraw(ctx, b, '#f6f6f2', o => { ctx.beginPath(); ctx.arc(ex + o, ey, er, 0, Math.PI * 2); });
+      blurDraw(ctx, b, '#141414', o => { ctx.beginPath(); ctx.arc(ex + o, ey, er * 0.5, 0, Math.PI * 2); });
+    } else {
+      const [x0, y0, x1, y1] = s.rect;
+      blurDraw(ctx, b, rgb(s.color), o => { ctx.beginPath(); ctx.rect(x0 + o, y0 - 30, x1 - x0, y1 - y0 + 60); });
+    }
+  }
+  // 透视：被挡住的主体
+  if ($('showGhost').checked && fr.vis < 0.95) {
+    ctx.save(); ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(fr.subj.x, fr.subj.y, fr.subj.r, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+  }
+  // 候选
+  if ($('showCands').checked) {
+    ctx.save(); ctx.font = '600 11px "JetBrains Mono", monospace';
+    for (const c of fr.cands) {
+      ctx.fillStyle = c.source === 'ai' ? '#5fe0ff' : c.source === 'pattern' ? '#ffffff' : '#c8c8c8';
+      ctx.beginPath(); ctx.arc(c.x, c.y, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,.55)'; const txt = c.score.toFixed(2); const w = ctx.measureText(txt).width;
+      ctx.fillRect(c.x + 6, c.y - 18, w + 6, 14);
+      ctx.fillStyle = c.score > ACCEPT ? '#9dffbf' : '#ffd2a8'; ctx.fillText(txt, c.x + 9, c.y - 7);
+    }
+    ctx.restore();
+  }
+  // 预测位置
+  if ($('showPred').checked) {
+    ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,.95)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(fr.px - 7, fr.py); ctx.lineTo(fr.px + 7, fr.py); ctx.moveTo(fr.px, fr.py - 7); ctx.lineTo(fr.px, fr.py + 7); ctx.stroke(); ctx.restore();
+  }
+  // 对焦框：相机式四角括号
+  const hs = Math.max(12, 1.3 * fr.tr), L = Math.max(6, hs * 0.42), x = fr.tx, y = fr.ty;
+  ctx.save(); ctx.lineWidth = 2.5; ctx.strokeStyle = fr.on ? '#3fe07f' : '#ff4d3f';
+  if (fr.status === 'coasting') ctx.setLineDash([3, 3]);
+  ctx.beginPath();
+  for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+    const cx = x + sx * hs, cy = y + sy * hs;
+    ctx.moveTo(cx, cy - sy * L); ctx.lineTo(cx, cy); ctx.lineTo(cx - sx * L, cy);
+  }
+  ctx.stroke(); ctx.restore();
+  // EVF 信息条
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,.58)'; ctx.fillRect(0, H - 34, W, 34);
+  ctx.font = '600 15px "JetBrains Mono", monospace'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = fr.inf ? '#3fe07f' : '#ffffff'; ctx.fillText('AF-C', 14, H - 17);
+  ctx.beginPath(); ctx.arc(66, H - 17, 5, 0, Math.PI * 2); ctx.fillStyle = fr.inf ? '#3fe07f' : 'rgba(255,255,255,.25)'; ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  const fz = 1 / Math.max(D, 1e-3);
+  ctx.fillText(`主体 ${fr.subj.z.toFixed(1).padStart(4)}m   对焦 ${(fz > 99 ? '∞' : fz.toFixed(1)).padStart(4)}m`, 90, H - 17);
+  ctx.textAlign = 'right';
+  ctx.fillText(`${fr.t.toFixed(2)}s`, W - 14, H - 17);
+  const [stxt] = STATUS[fr.status];
+  ctx.font = '600 14px "Noto Sans SC", sans-serif';
+  ctx.fillStyle = fr.status === 'tracking' ? '#3fe07f' : '#ffb04a';
+  let extra = '';
+  if (fr.status === 'coasting') extra = ` ${fr.lost}/${fr.patience}`;
+  else if (fr.status === 'holding') extra = ` ${fr.obstacle}/${fr.patience}`;
+  ctx.fillText(stxt + extra, W - 90, H - 17);
+  ctx.restore();
+}
+
+// ---------------- 距离曲线
+function setupCanvas(cv, h) {
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth || 600;
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); return [ctx, w];
+}
+function axisRange() {
+  let mn = Infinity, mx = 0; for (const z of subjPath) { mn = Math.min(mn, z); mx = Math.max(mx, z); }
+  return [Math.max(1.2, mn * 0.55), Math.min(BG_DIST * 1.5, mx * 2.1)];
+}
+const TICKS = [1.5, 2, 3, 5, 7, 10, 15, 20, 30, 50, 80];
+function drawTimeline() {
+  const h = 210, [ctx, w] = setupCanvas(tl, h);
+  const C = { ink: cssVar('--ink'), muted: cssVar('--muted'), line: cssVar('--line'), subj: cssVar('--subj'), focus: cssVar('--focus'), bad: cssVar('--bad'), shade: cssVar('--shade') };
+  const m = { l: 36, r: 8, t: 8, b: 22 }, pw = w - m.l - m.r, ph = h - m.t - m.b;
+  const [zmin, zmax] = axisRange(), lmin = Math.log(zmin), lmax = Math.log(zmax);
+  const T = sim.N * DT;
+  const X = t => m.l + t / T * pw, Y = z => m.t + (1 - (Math.log(Math.min(Math.max(z, zmin), zmax)) - lmin) / (lmax - lmin)) * ph;
+  ctx.clearRect(0, 0, w, h);
+  ctx.font = '11px "JetBrains Mono", monospace'; ctx.fillStyle = C.muted; ctx.strokeStyle = C.line; ctx.lineWidth = 1;
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (const v of TICKS) { if (v < zmin || v > zmax) continue; const y = Y(v); ctx.beginPath(); ctx.moveTo(m.l, y); ctx.lineTo(w - m.r, y); ctx.stroke(); ctx.fillText(v, m.l - 6, y); }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (let s = 0; s <= T + 1e-6; s += 1) { const x = X(s); ctx.beginPath(); ctx.moveTo(x, m.t); ctx.lineTo(x, m.t + ph); ctx.stroke(); ctx.fillText(s + 's', x, m.t + ph + 6); }
+  const L = sim.log, n = L.t.length;
+  // 遮挡与跟错的区间
+  const spans = (pred, fn) => { let s = null; for (let i = 0; i <= n; i++) { const v = i < n && pred(i); if (v && s === null) s = i; if (!v && s !== null) { fn(L.t[s], L.t[i - 1] + DT); s = null; } } };
+  ctx.fillStyle = C.shade; spans(i => L.vis[i] < 0.5, (a, b) => ctx.fillRect(X(a), m.t, X(b) - X(a), ph));
+  ctx.fillStyle = C.bad; spans(i => L.vis[i] >= 0.5 && !L.on[i], (a, b) => ctx.fillRect(X(a), m.t + ph - 6, Math.max(1, X(b) - X(a)), 6));
+  // 合焦范围
+  ctx.beginPath();
+  for (let i = 0; i < subjPath.length; i++) { const sD = 1 / subjPath[i]; const zn = 1 / Math.min(sD + TOL, 1 / MIN_FD); i ? ctx.lineTo(X(i * DT), Y(zn)) : ctx.moveTo(X(0), Y(zn)); }
+  for (let i = subjPath.length - 1; i >= 0; i--) { const sD = 1 / subjPath[i]; const zf = sD - TOL > 1e-3 ? 1 / (sD - TOL) : zmax; ctx.lineTo(X(i * DT), Y(zf)); }
+  ctx.closePath(); ctx.globalAlpha = 0.13; ctx.fillStyle = C.subj; ctx.fill(); ctx.globalAlpha = 1;
+  // 主体距离：已发生的实线，未来的虚线
+  ctx.lineWidth = 2; ctx.strokeStyle = C.subj;
+  ctx.beginPath(); for (let i = 0; i < n; i++) { const x = X(i * DT), y = Y(subjPath[i]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.stroke();
+  ctx.save(); ctx.setLineDash([3, 4]); ctx.globalAlpha = 0.5; ctx.lineWidth = 1.5;
+  ctx.beginPath(); for (let i = Math.max(0, n - 1); i < subjPath.length; i++) { const x = X(i * DT), y = Y(subjPath[i]); i === Math.max(0, n - 1) ? ctx.moveTo(x, y) : ctx.lineTo(x, y); } ctx.stroke(); ctx.restore();
+  // 对焦距离
+  ctx.lineWidth = 1.6; ctx.strokeStyle = C.focus; ctx.beginPath();
+  for (let i = 0; i < n; i++) { const x = X(L.t[i]), y = Y(1 / Math.max(L.fD[i], 1e-3)); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+  ctx.stroke();
+  // 当前时间
+  if (n) { const x = X(L.t[n - 1]); ctx.strokeStyle = C.ink; ctx.globalAlpha = 0.5; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, m.t); ctx.lineTo(x, m.t + ph); ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.fillStyle = C.focus; ctx.beginPath(); ctx.arc(x, Y(1 / Math.max(L.fD[n - 1], 1e-3)), 3.5, 0, Math.PI * 2); ctx.fill(); }
+}
+
+// ---------------- 镜头对焦距离刻度（像镜头上的距离窗）
+function drawScale() {
+  const h = 58, [ctx, w] = setupCanvas(sc, h), fr = sim.frame; if (!fr) return;
+  const C = { ink: cssVar('--ink'), muted: cssVar('--muted'), line: cssVar('--line'), subj: cssVar('--subj'), focus: cssVar('--focus'), accent: cssVar('--accent'), sunk: cssVar('--sunk') };
+  const [zmin, zmax] = axisRange(), lmin = Math.log(zmin), lmax = Math.log(zmax);
+  const m = 14, X = z => m + (Math.log(Math.min(Math.max(z, zmin), zmax)) - lmin) / (lmax - lmin) * (w - 2 * m);
+  ctx.clearRect(0, 0, w, h);
+  const y0 = 22;
+  ctx.fillStyle = C.sunk; ctx.fillRect(m, y0 - 8, w - 2 * m, 16);
+  const sD = 1 / fr.subj.z, zn = 1 / Math.min(sD + TOL, 1 / MIN_FD), zf = sD - TOL > 1e-3 ? 1 / (sD - TOL) : zmax;
+  ctx.globalAlpha = 0.28; ctx.fillStyle = C.subj; ctx.fillRect(X(zn), y0 - 8, X(zf) - X(zn), 16); ctx.globalAlpha = 1;
+  ctx.font = '11px "JetBrains Mono", monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillStyle = C.muted; ctx.strokeStyle = C.muted;
+  for (const v of TICKS) { if (v < zmin || v > zmax) continue; const x = X(v); ctx.beginPath(); ctx.moveTo(x, y0 + 8); ctx.lineTo(x, y0 + 13); ctx.stroke(); ctx.fillText(v + 'm', x, y0 + 16); }
+  // 主体
+  const xs = X(fr.subj.z); ctx.fillStyle = C.subj; ctx.beginPath(); ctx.moveTo(xs, y0 - 9); ctx.lineTo(xs - 6, y0 - 19); ctx.lineTo(xs + 6, y0 - 19); ctx.closePath(); ctx.fill();
+  // 对焦指示
+  const xf = X(1 / Math.max(fr.lensD, 1e-3)); ctx.fillStyle = C.focus; ctx.fillRect(xf - 1.5, y0 - 10, 3, 20);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.font = '600 11px "Noto Sans SC", sans-serif';
+  ctx.fillStyle = C.muted; ctx.fillText('距离窗：▼主体  ┃对焦', m, 0);
+  ctx.textAlign = 'right'; ctx.fillStyle = fr.inf ? C.accent : C.muted; ctx.fillText(fr.inf ? '合焦' : '失焦', w - m, 0);
+}
+
+// ---------------- 数字与事件
+const EV = {
+  lost: ['跟丢或被挡住，开始按预测盲追', 'warn'],
+  reacquired: ['重新找到 {n}', 'ok'],
+  reacquire_new: ['等不下去了，改追 {n}', 'bad'],
+  ai_takeover: ['AI 认出 {n}，接管跟踪', 'ok'],
+  depth_hold: ['测到的距离突变，怀疑是障碍物，先不跟', 'warn'],
+  depth_jump: ['等不下去了，焦点跳到新距离', 'bad'],
+};
+let logShown = 0;
+function updateText() {
+  const m = sim.metrics(), fmt = v => isNaN(v) ? '—' : v.toFixed(2) + ' s';
+  $('sFocus').textContent = isNaN(m.focus) ? '—' : (m.focus * 100).toFixed(1) + '%';
+  $('sWrong').textContent = m.wrongT.toFixed(2) + ' s';
+  $('sFirst').textContent = fmt(m.first);
+  $('sRecov').textContent = m.occl ? (fmt(m.recov) + (m.never ? ` · ${m.never} 次未恢复` : '')) : '无遮挡';
+  $('sRecov').style.fontSize = m.never ? '16px' : '';
+  const fr = sim.frame;
+  const [txt, cls] = sim.done ? ['已结束', ''] : STATUS[fr.status];
+  const chip = $('statusChip'); chip.textContent = fr.on || sim.done ? txt : txt + ' · 追错了'; chip.className = 'chip ' + (fr.on || sim.done ? cls : 'bad');
+  $('tNow').textContent = fr.t.toFixed(2) + ' s';
+  const ul = $('log');
+  while (logShown < sim.events.length) {
+    const e = sim.events[logShown++];
+    if (e.e === 'depth_hold' && logShown > 1 && sim.events[logShown - 2].e === 'depth_hold') continue;
+    const [tpl, k0] = EV[e.e];
+    let k = k0; if (e.e === 'ai_takeover' || e.e === 'reacquired') k = e.kind === 'subject' ? 'ok' : 'bad';
+    if (e.e === 'reacquire_new') k = e.kind === 'subject' ? 'ok' : 'bad';
+    const li = document.createElement('li'); li.className = 'k-' + k;
+    li.innerHTML = `<b>${e.t.toFixed(2)}s</b><span></span>`; li.lastChild.textContent = tpl.replace('{n}', e.name);
+    ul.prepend(li);
+  }
+  if (!ul.children.length) ul.innerHTML = '<li><b>—</b><span>还没有事件。主体被挡住或跟踪器换目标时，这里会记一笔。</span></li>';
+  else if (ul.lastChild && ul.lastChild.textContent.startsWith('—')) ul.lastChild.remove();
+}
+
+let textTick = 0;
+function renderAll(force) {
+  drawVF(); drawTimeline(); drawScale();
+  if (force || ++textTick % 4 === 0 || sim.done) updateText();
+}
+
+function loop(ts) {
+  if (last === null) last = ts;
+  const dt = Math.min(0.1, (ts - last) / 1000); last = ts;
+  let stepped = false;
+  if (playing && !sim.done) {
+    acc += dt * rate; let k = 0;
+    while (acc >= DT && !sim.done && k < 12) { sim.step(); acc -= DT; k++; stepped = true; }
+    if (sim.done) { playing = false; setPlayLabel(); }
+  }
+  if (stepped) renderAll(sim.done);
+  requestAnimationFrame(loop);
+}
+
+// ---------------- 对比
+function runCompare() {
+  const base = cfgFromUI(), cur = base;
+  const res = [];
+  for (let s = 1; s <= 5; s++) { const row = []; for (let p = 0; p <= 2; p++) {
+    let f = 0, w = 0; for (const seed of [1, 2]) { const S = new Sim(sceneKey, Object.assign({}, base, { sens: s, pred: p }), seed); while (!S.done) S.step(); const m = S.metrics(); f += m.focus; w += m.wrongF; }
+    row.push([f / 2, w / 2]); } res.push(row); }
+  const names = ['不预测', '匀速', '匀速 + 加速度'];
+  let html = `<table><thead><tr><th>灵敏度</th>${names.map(n => `<th>${n}</th>`).join('')}</tr></thead><tbody>`;
+  res.forEach((row, i) => {
+    html += `<tr><th>${i + 1}${i === 0 ? ' 黏' : i === 4 ? ' 灵敏' : ''}</th>`;
+    row.forEach(([f, w], p) => {
+      const pct = Math.round(f * 100), bgc = `color-mix(in srgb, var(--accent) ${Math.round(Math.max(0, f - 0.3) / 0.7 * 38)}%, transparent)`;
+      const cls = 'cell' + (cur.sens === i + 1 && cur.pred === p ? ' cur' : '');
+      html += `<td class="${cls}" style="background:${bgc}">${pct}%<small style="color:${w > 0.05 ? 'var(--bad)' : 'var(--muted)'}">跟错 ${Math.round(w * 100)}%</small></td>`;
+    });
+    html += '</tr>';
+  });
+  html += `</tbody></table><p class="note" style="margin-top:8px">场景：${SCENES[sceneKey].title} · AI 识别${base.ai ? '开' : '关'} · 马达 ${base.motor.toFixed(1)} · 延迟 ${base.lat} ms · 光线 ${LIGHT_NAME[base.light]} · 速度 ×${base.speed.toFixed(1)}</p>`;
+  $('cmp').innerHTML = html;
+}
+$('cmpBtn').addEventListener('click', () => { $('cmpBtn').textContent = '计算中…'; $('cmpBtn').disabled = true;
+  setTimeout(() => { runCompare(); $('cmpBtn').textContent = '重新运行对比'; $('cmpBtn').disabled = false; }, 30); });
+
+// ---------------- 预设实验
+const EXPS = [
+  { t: '柱子挡住时：等，还是换？', d: '鸟穿过柱子，关掉 AI，灵敏度 5。焦点会跳到柱子上再也回不来。改成 1 对比一下。',
+    set: { scene: 'occlusion', ai: false, sens: 5, pred: 2 } },
+  { t: '认错人', d: '两人交错，灵敏度 4。对手挡住主体的一瞬间，跟踪器改追了对手。调回 3 就不会。',
+    set: { scene: 'crossing', ai: true, sens: 4, pred: 2 } },
+  { t: '没有提前量会怎样', d: '运动员冲向镜头，关闭预测，延迟 120 ms。对焦曲线总是落后于主体。再打开“匀速”。',
+    set: { scene: 'approach', ai: true, sens: 3, pred: 0, lat: 120 } },
+  { t: '暗光下的乱飞小鸟', d: '光线调到很暗，测距噪声变大，对焦曲线开始抖动，合焦率下降。',
+    set: { scene: 'erratic', ai: true, sens: 3, pred: 2, light: 5 } },
+];
+const expEl = $('exps');
+EXPS.forEach((e, i) => {
+  const b = document.createElement('button'); b.innerHTML = `${e.t}<span></span>`; b.lastChild.textContent = e.d;
+  b.addEventListener('click', () => {
+    const s = e.set;
+    sceneKey = s.scene; $('sc_' + s.scene).checked = true;
+    $('ai').checked = s.ai; $('sens').value = s.sens; $('p' + s.pred).checked = true;
+    $('lat').value = s.lat ?? 50; $('light').value = s.light ?? 1; $('motor').value = 0.8; $('speed').value = 1;
+    playing = true; restart(); setPlayLabel();
+    $('vf').scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'nearest' });
+  });
+  expEl.appendChild(b);
+});
+
+// ---------------- 事件绑定
+for (const id of ['sens', 'motor', 'lat', 'light', 'speed']) {
+  $(id).addEventListener('input', updateOutputs);
+  $(id).addEventListener('change', () => restart());
+}
+document.querySelectorAll('input[name=pred]').forEach(el => el.addEventListener('change', () => restart()));
+$('ai').addEventListener('change', () => restart());
+document.querySelectorAll('input[name=scene]').forEach(el => el.addEventListener('change', () => { sceneKey = el.value; restart(); }));
+document.querySelectorAll('input[name=rate]').forEach(el => el.addEventListener('change', () => { rate = +el.value; }));
+['showPred', 'showCands', 'showGhost'].forEach(id => $(id).addEventListener('change', () => drawVF()));
+$('play').addEventListener('click', () => {
+  if (sim.done) { playing = true; restart(); }
+  else { playing = !playing; }
+  setPlayLabel();
+});
+$('restart').addEventListener('click', () => restart());
+$('stepbtn').addEventListener('click', () => { playing = false; sim.step(); renderAll(true); setPlayLabel(); });
+window.addEventListener('resize', () => renderAll(true));
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => renderAll(true));
+new MutationObserver(() => renderAll(true)).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+restart();
+if (reduce) { for (let i = 0; i < 150; i++) sim.step(); renderAll(true); setPlayLabel(); }
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => renderAll(true));
+requestAnimationFrame(loop);
+})();
+</script>
+
+</body></html>
