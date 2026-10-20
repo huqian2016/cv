@@ -1,0 +1,1365 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>主被写体選択ラボ</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;600&family=Noto+Sans+JP:wght@400;500;700&display=swap">
+<style>
+/* レイアウト：左がファインダーとスコア内訳、右がカメラのメニューのような設定パネル。下に比較実験とアルゴリズムの説明 */
+:root {
+  --bg: #eef2f0;
+  --panel: #ffffff;
+  --sunk: #e3e9e6;
+  --ink: #18211e;
+  --muted: #5a6863;
+  --line: #d2dbd7;
+  --accent: #17834a;          /* 合焦表示の緑 */
+  --accent-soft: rgba(23,131,74,.14);
+  --warn: #b86400;
+  --bad: #c3302a;
+  --c1: #3b6fd8; --c2: #d9822b; --c3: #8a5cc7; --c4: #1f9aa0; --c5: #d0507a; --c6: #7d8a2a; --c7: #8a8f8d;
+  --font-display: "Barlow Semi Condensed", "Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif;
+  --font-body: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", "Meiryo", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101514; --panel: #18201e; --sunk: #222b29; --ink: #e2eae6; --muted: #91a09a; --line: #2c3734;
+    --accent: #3fcd7c; --accent-soft: rgba(63,205,124,.16); --warn: #f0a23a; --bad: #ff6a5c;
+    --c1: #7aa2ff; --c2: #f2a35a; --c3: #b994ee; --c4: #4fc6cc; --c5: #f07fa3; --c6: #b4c24e; --c7: #a3aaa7;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101514; --panel: #18201e; --sunk: #222b29; --ink: #e2eae6; --muted: #91a09a; --line: #2c3734;
+  --accent: #3fcd7c; --accent-soft: rgba(63,205,124,.16); --warn: #f0a23a; --bad: #ff6a5c;
+  --c1: #7aa2ff; --c2: #f2a35a; --c3: #b994ee; --c4: #4fc6cc; --c5: #f07fa3; --c6: #b4c24e; --c7: #a3aaa7;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 14px; line-height: 1.65;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 40px;
+}
+.wrap { max-width: 1260px; margin: 0 auto; display: grid; gap: 18px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 20px; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(25px, 6vw, 30px); letter-spacing: .01em; margin: 0; text-wrap: balance; }
+h1 small { font-family: var(--font-mono); font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 10px; letter-spacing: .08em; }
+@media (max-width: 520px) { h1 small { display: block; margin-left: 0; } }
+header p { margin: 0; color: var(--muted); max-width: 64ch; }
+h2 { font-family: var(--font-display); font-weight: 600; font-size: 19px; margin: 0; letter-spacing: .02em; text-wrap: balance; }
+h3 { font-family: var(--font-display); font-weight: 600; font-size: 16.5px; margin: 10px 0 0; letter-spacing: .02em; }
+.label { font-family: var(--font-display); font-weight: 600; font-size: 12.5px; letter-spacing: .1em; color: var(--muted); }
+
+.main { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 920px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.col { display: grid; gap: 14px; min-width: 0; }
+
+.vf { position: relative; background: #0b0d0c; border-radius: 10px; overflow: hidden; }
+.vf canvas { display: block; width: 100%; height: auto; cursor: crosshair; touch-action: manipulation; }
+.transport { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+button, .seg label {
+  font-family: var(--font-display); font-weight: 600; font-size: 14px; letter-spacing: .03em;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 7px;
+  padding: 6px 12px; cursor: pointer; line-height: 1.3;
+}
+button:hover, .seg label:hover { border-color: var(--muted); }
+button:focus-visible, .seg input:focus-visible + label, input[type=range]:focus-visible, input[type=checkbox]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; min-width: 88px; }
+:root[data-theme="dark"] button.primary { color: #0c1410; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) button.primary { color: #0c1410; } }
+.transport .spacer { flex: 1; }
+.chip { font-family: var(--font-display); font-weight: 600; font-size: 13px; padding: 3px 10px; border-radius: 99px; background: var(--sunk); color: var(--muted); letter-spacing: .04em; white-space: nowrap; }
+.chip.ok { background: var(--accent-soft); color: var(--accent); }
+.chip.warn { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.chip.bad { background: color-mix(in srgb, var(--bad) 15%, transparent); color: var(--bad); }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 10px; min-width: 0; }
+.cardhead { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.chart canvas { display: block; width: 100%; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--muted); }
+.legend i { display: inline-block; width: 14px; height: 10px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 520px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.stat { display: grid; gap: 2px; }
+.stat b { font-family: var(--font-mono); font-weight: 600; font-size: 21px; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.stat span { font-size: 12px; color: var(--muted); }
+
+.ctrl { display: grid; gap: 2px; }
+.ctrl .row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.ctrl output { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.ctrl .hint { font-size: 12px; color: var(--muted); line-height: 1.45; }
+input[type=range] { width: 100%; accent-color: var(--accent); margin: 2px 0; }
+.ticks { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); margin-top: -2px; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label { font-size: 13.5px; padding: 5px 10px; }
+.seg input:checked + label { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.desc { font-size: 13px; color: var(--muted); margin: 0; }
+.checks { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); }
+.checks label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.checks input { accent-color: var(--accent); }
+.weights { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 16px; }
+@media (max-width: 400px) { .weights { grid-template-columns: minmax(0, 1fr); } }
+.weights .ctrl label { font-size: 13px; }
+
+.log { font-family: var(--font-mono); font-size: 12px; max-height: 200px; overflow-y: auto; display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.log li { display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 8px; color: var(--muted); }
+.log li b { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.log li.k-bad span { color: var(--bad); }
+.log li.k-warn span { color: var(--warn); }
+.log li.k-ok span { color: var(--accent); }
+.log span { font-family: var(--font-body); }
+
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 6px; text-align: center; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+th { font-family: var(--font-display); font-weight: 600; color: var(--muted); letter-spacing: .03em; white-space: nowrap; }
+#scoreTbl { min-width: 560px; }
+#scoreTbl td { font-family: var(--font-mono); font-size: 12px; position: relative; }
+#scoreTbl td.f { background: color-mix(in srgb, var(--accent) calc(var(--v) * 30%), transparent); }
+#scoreTbl th.off, #scoreTbl td.off { opacity: .35; }
+#scoreTbl td.name { text-align: left; font-family: var(--font-display); font-weight: 600; font-size: 13.5px; white-space: nowrap; }
+#scoreTbl td.name i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+#scoreTbl td.tot { text-align: left; min-width: 110px; }
+#scoreTbl td.tot .bar { height: 6px; border-radius: 3px; background: var(--muted); margin-top: 2px; }
+#scoreTbl tr.sel td { background-color: var(--accent-soft); }
+#scoreTbl tr.sel td.name { color: var(--accent); }
+#scoreTbl tr.miss td { color: var(--muted); }
+.tag { font-family: var(--font-display); font-size: 11.5px; font-weight: 600; padding: 0 6px; border-radius: 99px; margin-left: 6px; letter-spacing: .03em; }
+.tag.sel { background: var(--accent); color: var(--panel); }
+.tag.pend { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+.tag.ideal { background: var(--sunk); color: var(--ink); }
+#cmpTbl { min-width: 640px; }
+#cmpTbl td.cell { font-family: var(--font-mono); }
+#cmpTbl td.cell small { display: block; font-size: 11px; color: var(--muted); }
+#cmpTbl td.best b { color: var(--accent); }
+#cmpTbl td.cur { outline: 2px solid var(--accent); outline-offset: -2px; }
+#cmpTbl td.sc { text-align: left; font-family: var(--font-display); font-weight: 600; font-size: 13px; white-space: nowrap; }
+.note { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+.lower { display: grid; gap: 18px; }
+.algo p, .algo li { max-width: 78ch; }
+.algo ul { margin: 0; padding-left: 1.3em; display: grid; gap: 4px; }
+.algo p { margin: 0; }
+.formula { font-family: var(--font-mono); font-size: 12.5px; background: var(--sunk); border-radius: 8px; padding: 10px 12px; white-space: pre-wrap; overflow-x: auto; line-height: 1.6; }
+.flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; }
+.flow .box { background: var(--sunk); border-radius: 6px; padding: 4px 10px; }
+.flow .arr { color: var(--muted); }
+#algoFeat { min-width: 560px; }
+#algoFeat td { text-align: left; vertical-align: top; }
+#algoFeat td:first-child { white-space: nowrap; font-weight: 700; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>主被写体選択ラボ <small>SUBJECT SELECT · 60 Hz SIM</small></h1>
+    <p>画面に鳥や人が何羽・何人もいるとき、カメラはどれにピントを合わせるべきか。手がかりの重み付けを変えて、選ばれる被写体とピントがどう変わるかを確かめる実験台です。カメラもレンズも認識もすべてシミュレーションです。</p>
+  </header>
+
+  <div class="main">
+    <div class="col">
+      <div class="vf"><canvas id="vf" width="800" height="450" aria-label="シミュレーションのファインダー画面。クリックでAF点を移動"></canvas></div>
+      <div class="transport">
+        <button id="play" class="primary">一時停止</button>
+        <button id="restart">最初から</button>
+        <button id="stepbtn">1コマ送り</button>
+        <div class="seg" role="radiogroup" aria-label="再生速度">
+          <input type="radio" name="rate" id="r025" value="0.25"><label for="r025">0.25×</label>
+          <input type="radio" name="rate" id="r05" value="0.5"><label for="r05">0.5×</label>
+          <input type="radio" name="rate" id="r1" value="1" checked><label for="r1">1×</label>
+        </div>
+        <span class="spacer"></span>
+        <span id="statusChip" class="chip ok">撮りたい被写体に合焦</span>
+      </div>
+      <div class="checks">
+        <label><input type="checkbox" id="showCands" checked>候補の枠とスコア</label>
+        <label><input type="checkbox" id="showIdeal" checked>撮りたい被写体（★）</label>
+        <label><input type="checkbox" id="showEye" checked>瞳の検出</label>
+        <span>画面をクリックすると AF 点が動きます</span>
+      </div>
+
+      <div class="card">
+        <div class="cardhead"><h2>スコアの内訳</h2><span class="label" id="scoreState">—</span></div>
+        <div class="tablewrap"><table id="scoreTbl"><thead></thead><tbody></tbody></table></div>
+        <p class="note">各欄は手がかりの値（0〜100）。色の濃さが値の大きさ。重みが 0 の手がかりは薄く表示。合計は重み付き平均です。</p>
+      </div>
+
+      <div class="card chart">
+        <div class="cardhead"><h2>選択の推移</h2><span class="label">0〜12 秒</span></div>
+        <canvas id="tl" height="250" aria-label="各被写体の合計スコアと、選ばれた被写体の推移"></canvas>
+        <div class="legend" id="tlLegend"></div>
+      </div>
+
+      <div class="card">
+        <div class="stats">
+          <div class="stat"><b id="sMatch">—</b><span>撮りたい被写体を選べた割合</span></div>
+          <div class="stat"><b id="sFocus">—</b><span>撮りたい被写体に合焦していた割合</span></div>
+          <div class="stat"><b id="sSwitch">—</b><span>乗り移り回数</span></div>
+          <div class="stat"><b id="sLag">—</b><span>撮りたい被写体が変わってから追いつくまで</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card">
+        <span class="label">場面</span>
+        <div class="seg" id="sceneSeg" role="radiogroup" aria-label="場面"></div>
+        <p class="desc" id="sceneDesc"></p>
+      </div>
+
+      <div class="card">
+        <span class="label">主被写体の選び方</span>
+        <div class="seg" id="presetSeg" role="radiogroup" aria-label="選び方"></div>
+        <p class="desc" id="presetDesc"></p>
+      </div>
+
+      <div class="card">
+        <div class="cardhead"><span class="label">手がかりの重み</span><span class="note">動かすと「カスタム」になります</span></div>
+        <div class="weights" id="weights"></div>
+      </div>
+
+      <div class="card">
+        <span class="label">乗り移りとレンズ</span>
+        <div class="ctrl">
+          <div class="row"><label for="sens">乗り移り感度</label><output id="sensOut"></output></div>
+          <input type="range" id="sens" min="1" max="5" step="1" value="3">
+          <div class="ticks"><span>粘る</span><span>敏感</span></div>
+          <div class="hint" id="sensHint"></div>
+        </div>
+        <div class="ctrl">
+          <div class="row"><label for="fno">絞り（F値）</label><output id="fnoOut"></output></div>
+          <input type="range" id="fno" min="0" max="7" step="1" value="5">
+          <div class="hint" id="fnoHint"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <span class="label">出来事</span>
+        <ol class="log" id="log"></ol>
+      </div>
+    </div>
+  </div>
+
+  <div class="lower">
+    <div class="card">
+      <div class="cardhead">
+        <h2>比較実験</h2>
+        <button id="cmpBtn">全場面 × 全方式を計算</button>
+      </div>
+      <p class="note">いまの「乗り移り感度」と絞りで、5 つの場面を 6 つの方式（とカスタム）で最後まで走らせます。上の数字は撮りたい被写体を選べた割合、下の数字は合焦していた割合。枠は今の組み合わせ、緑は場面ごとの最高値です。</p>
+      <div class="tablewrap"><table id="cmpTbl"><thead></thead><tbody></tbody></table></div>
+    </div>
+
+    <div class="card algo" id="algo">
+      <h2>アルゴリズムの詳細</h2>
+      <p>1 コマ（1/60 秒）ごとに次のループを回します。カメラ側のアルゴリズムが使えるのは「画像と位相差AFから分かること」だけです。台本が持っている本当の距離や「撮りたい被写体」は、描画と評価にしか使いません。</p>
+      <div class="flow" aria-label="1コマの処理の流れ">
+        <span class="box">① 描画（いまのピント位置でボケを付ける）</span><span class="arr">→</span>
+        <span class="box">② 検出（被写体・頭・瞳・姿勢）</span><span class="arr">→</span>
+        <span class="box">③ 手がかりを 9 つ計算</span><span class="arr">→</span>
+        <span class="box">④ 重み付き合計で順位付け</span><span class="arr">→</span>
+        <span class="box">⑤ 乗り移り判定</span><span class="arr">→</span>
+        <span class="box">⑥ 位相差AF・レンズ駆動</span><span class="arr">↺</span>
+      </div>
+
+      <h3>1. 検出</h3>
+      <ul>
+        <li><b>露出度</b>：被写体の体・頭・翼を楕円で近似し、その中の決まった点が「画面内にあり、手前の物に隠れていないか」を数えます。20% 未満、または高さ 10 画素未満なら検出しません。</li>
+        <li><b>検出確率</b>：0.35 +（露出度 − 0.2）× 1.6（上限 0.98）。ボケの直径が被写体の高さの 35% を超えると 0.6 倍になります。大きくボケた被写体は見つけにくい、という実機と同じ性質です。</li>
+        <li><b>瞳</b>：頭が半分以上見えていて、顔が横向きより前を向き、瞳の大きさが 1.6 画素以上、ボケが頭の大きさより小さいときに 92% の確率で検出します。</li>
+        <li><b>距離</b>：撮像面位相差AFは画面のほぼ全域で測れるので、候補それぞれのデフォーカス量（ディオプター）を測ります。ボケているほど測定ノイズが大きくなります。</li>
+      </ul>
+
+      <h3>2. 9 つの手がかり（すべて 0〜1）</h3>
+      <div class="tablewrap">
+        <table id="algoFeat">
+          <thead><tr><th>手がかり</th><th>計算</th><th>ねらい</th></tr></thead>
+          <tbody>
+            <tr><td>大きさ</td><td>√(画面上の高さ ÷ 画面の高さの 60%)</td><td>大きく写っているものほど主役らしい</td></tr>
+            <tr><td>近さ</td><td>候補の中で、測った距離（ディオプター）の順位を 0〜1 に並べ直す</td><td>手前のものほど主役らしい（古典的な至近優先）</td></tr>
+            <tr><td>AF点</td><td>exp(−(AF点との距離 / 画面幅)² / (2 × 0.18²))</td><td>撮影者が狙っている位置</td></tr>
+            <tr><td>瞳</td><td>瞳を検出したら 1、顔だけなら 0.3 × 向き</td><td>瞳に合っている写真は「合っている」と感じる</td></tr>
+            <tr><td>向き</td><td>(1 + cos(体の向き)) / 2 × 頭の露出度</td><td>背中より、こちらを向いている被写体</td></tr>
+            <tr><td>露出度</td><td>上の露出度そのもの</td><td>半分隠れた被写体や画面端で切れた被写体を下げる</td></tr>
+            <tr><td>動き</td><td>0.8 × 姿勢から推定した動作の大きさ + 0.2 × 画面上の速さ（体の大きさ ÷ 2 を 1 秒で動くと 1）</td><td>飛び立ち・ジャンプなど決定的瞬間</td></tr>
+            <tr><td>ピント移動</td><td>exp(−|候補の距離 − 今のピント位置| / (10 × 許容範囲))</td><td>大きなピント移動は失敗しやすく時間もかかる</td></tr>
+            <tr><td>継続</td><td>いま追っている被写体なら 1</td><td>理由なく主役をころころ変えない</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="formula">合計スコア = Σ 重み × 手がかり ÷ Σ 重み       （0〜1）
+許容範囲 = 許容錯乱円 0.03 mm × F値 ÷ 焦点距離²     （例：400mm f/5.6 → ±1.05 ミリディオプター）</div>
+
+      <h3>3. 乗り移り判定</h3>
+      <ul>
+        <li>いま追っている被写体より合計スコアが「マージン」以上高い候補が、決められたコマ数続けて 1 位なら乗り移ります。</li>
+        <li>追っている被写体が検出されなくなったら、「待ち時間」の間はピントを保持します（手前を何かが横切っただけかもしれないから）。過ぎたら 1 位の候補に乗り移ります。</li>
+      </ul>
+      <div class="formula">乗り移り感度    1      2      3      4      5
+マージン        0.18   0.12   0.08   0.05   0.02
+確認コマ数      30     18     10     5      1
+見失い待ち      45     30     18     10     4    （コマ）</div>
+
+      <h3>4. ピント合わせ</h3>
+      <ul>
+        <li>選んだ被写体の頭（隠れていれば体）を位相差AFで測り、α-β フィルタ（α = 0.5、β = 0.1）で距離と速度を推定します。乗り移ったときはフィルタをリセットします。</li>
+        <li>レンズへの指令 = 推定距離 + 速度 ×（遅延 3 コマ + 1 コマ）。レンズは指令を 3 コマ遅れで受け取り、場面ごとのモーター速度より速くは動きません。</li>
+        <li>「至近優先（被写体検出なし）」だけは別の方式です。画面中央の広いエリアの中で、隠れていない部分がある物のうち最も手前のものに合わせます。葉や枝も対象になります。</li>
+      </ul>
+
+      <h3>5. 評価</h3>
+      <ul>
+        <li><b>撮りたい被写体</b>：場面ごとに台本で決めています（例：飛び立つ瞬間はその鳥）。撮影者によって答えは変わり得るので、一つの例として見てください。</li>
+        <li><b>選べた割合・合焦率</b>：撮りたい被写体が 30% 以上見えているコマのうち、選択が一致した割合と、レンズのピントが許容範囲内だった割合。</li>
+        <li><b>追いつくまで</b>：撮りたい被写体が変わってから、選択が 5 コマ続けて一致するまでの時間の平均。</li>
+      </ul>
+
+      <h3>6. 簡略化している点</h3>
+      <ul>
+        <li>検出・瞳・姿勢は台本の幾何から計算し、確率で取りこぼしを入れています。実機ではニューラルネットが画像から推定します。</li>
+        <li>カメラは固定です（流し撮りなし）。同じ被写体のコマ間の対応づけは完全にできるものとしています。</li>
+        <li>メーカー各社の実際の主被写体選択アルゴリズムは公開されていません。ここで使っているのは、公開情報と一般的な考え方をもとにした自作の近似で、考え方を理解するためのものです。</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+// CORE-BEGIN  ———— シミュレーション本体（DOM に依存しない）
+const W = 800, H = 450, FPS = 60, DT = 1 / FPS, PX_PER_MM = H / 24, DUR = 12;
+const LAT = 3;
+const FNOS = [1.4, 1.8, 2, 2.8, 4, 5.6, 8, 11];
+const FEATS = [
+  ['S', '大きさ'], ['N', '近さ'], ['C', 'AF点'], ['E', '瞳'], ['F', '向き'],
+  ['V', '露出度'], ['A', '動き'], ['R', 'ピント移動'], ['K', '継続']
+];
+const SENS = {
+  margin: [0.12, 0.08, 0.05, 0.03, 0.01],
+  confirm: [30, 18, 10, 5, 1],
+  hold: [45, 30, 18, 10, 4]
+};
+const PRESETS = {
+  raw:     { name: '至近優先（検出なし）', desc: '被写体検出を使わず、画面中央の広いエリアの中でいちばん手前にある物に合わせます。昔ながらの「至近優先」。葉や枝、横切る人にも合ってしまいます。', raw: true,
+             w: { S: 0, N: 1, C: 0, E: 0, F: 0, V: 0, A: 0, R: 0, K: 0 } },
+  nearest: { name: '最も近い被写体', desc: '検出した鳥や人のうち、いちばん手前のものを選びます。被写体検出はあるけれど、選び方は距離だけ。', w: { S: .3, N: 1, C: 0, E: 0, F: 0, V: .1, A: 0, R: 0, K: .2 } },
+  center:  { name: 'AF点優先', desc: 'AF点（画面をクリックで移動）にいちばん近い被写体を選びます。撮影者が狙いを付けるやり方。', w: { S: .15, N: 0, C: 1, E: 0, F: 0, V: .2, A: 0, R: 0, K: .2 } },
+  eye:     { name: '瞳・顔優先', desc: '瞳が見えている被写体、こちらを向いている被写体を優先します。', w: { S: .2, N: 0, C: .25, E: 1, F: .5, V: .2, A: 0, R: 0, K: .2 } },
+  action:  { name: '動き優先', desc: '姿勢から推定した動作の大きさと画面上の速さを優先します。キヤノンの「アクション優先」に近い考え方ですが、ボールのような手がかりはありません。', w: { S: .1, N: 0, C: .2, E: .2, F: 0, V: .2, A: 1.4, R: 0, K: .2 } },
+  smart:   { name: '総合スコア', desc: '9 つの手がかりを重み付けして合計します。瞳・露出度・動きを重視し、いま追っている被写体には継続のボーナスを付けます。', w: { S: .45, N: .3, C: .4, E: .8, F: .4, V: .7, A: 2.2, R: .2, K: .3 } },
+  custom:  { name: 'カスタム', desc: '重みを自由に変えた設定です。', w: null }
+};
+const PRESET_ORDER = ['raw', 'nearest', 'center', 'eye', 'action', 'smart'];
+
+function rngFrom(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function gauss(r) { let u = 0, v = 0; while (u === 0) u = r(); v = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+
+// キーフレーム（区間ごとに smoothstep。lin=true なら直線）
+function kf(keys, lin) {
+  return t => {
+    if (t <= keys[0][0]) return keys[0][1];
+    for (let i = 1; i < keys.length; i++) {
+      if (t <= keys[i][0]) {
+        const [t0, v0] = keys[i - 1], [t1, v1] = keys[i];
+        let a = (t - t0) / (t1 - t0);
+        if (!lin) a = a * a * (3 - 2 * a);
+        return v0 + (v1 - v0) * a;
+      }
+    }
+    return keys[keys.length - 1][1];
+  };
+}
+function steps(keys) {
+  return t => { let v = keys[0][1]; for (const [k, s] of keys) if (t >= k) v = s; return v; };
+}
+const K = v => () => v;
+
+const LOOK = {
+  heron: { body: '#9aa4aa', belly: '#e6eaec', wing: '#6c767c', head: '#d9dee0', cap: '#2b3034', beak: '#d9a531', leg: '#8a7a3a' },
+  duck:  { body: '#8a6a4b', belly: '#c9b08f', wing: '#5d4633', head: '#2f5c3c', cap: '#24432d', beak: '#d8b23c', leg: '#d1822f' },
+  plover:{ body: '#a88f6e', belly: '#f1ece3', wing: '#7a654b', head: '#a88f6e', cap: '#3a3029', beak: '#2b2522', leg: '#c9a35a' },
+  tit:   { body: '#7f8f6a', belly: '#f0e6b8', wing: '#5c6b72', head: '#1f2326', cap: '#1f2326', beak: '#2b2522', leg: '#6b6a70' },
+  robin: { body: '#8d7a62', belly: '#e8855a', wing: '#6c5c48', head: '#8d7a62', cap: '#6f604d', beak: '#2b2522', leg: '#6b6a70' },
+  gull:  { body: '#e9ecef', belly: '#f7f8f9', wing: '#9aa6b0', head: '#f2f4f5', cap: '#f2f4f5', beak: '#e2b43a', leg: '#e09060' },
+  crane: { body: '#b8bfc4', belly: '#dfe3e6', wing: '#5f676d', head: '#1f2326', cap: '#c8323a', beak: '#6f6a5a', leg: '#3a3a3a' }
+};
+const STYLE = {
+  a: { skin: '#e2b893', hair: '#2b2220', top: '#3b6fa8', bottom: '#2c3440' },
+  b: { skin: '#c99a73', hair: '#1c1714', top: '#b8453b', bottom: '#40382f' },
+  c: { skin: '#edc6a2', hair: '#6b4a2e', top: '#e2c24a', bottom: '#2f3c55' },
+  d: { skin: '#b07f5a', hair: '#141110', top: '#3e8a6a', bottom: '#2a2a2a' },
+  e: { skin: '#e6bf9c', hair: '#3b2a1e', top: '#7a5ab8', bottom: '#1f2430' },
+  f: { skin: '#d5a882', hair: '#2a2420', top: '#e5e7e8', bottom: '#3d4c5c' }
+};
+
+// 場面。u は画面上の横位置（0〜1）、Y は足元（鳥は体の下端）の高さ m、Z は距離 m、yaw は体の向き（0 = こちら向き、±90 = 横、180 = 背中）
+const SCENES = [
+  {
+    key: 'shore', name: '水辺の群れ', kind: 'bird', f: 400, fno: 5, camH: 0.3, bgZ: 140, motor: 0.6, startZ: 20,
+    desc: '浅瀬に 5 羽。手前の B1 は背中向きで画面の端に切れている。B2 はこちらを向いて瞳が見える。4 秒すぎに中央の B3 が飛び立つ。撮りたいのは「最初は B2、飛び立ちは B3、飛び去ったら B2」。',
+    ideal: steps([[0, 'B2'], [3.9, 'B3'], [8.0, 'B2']]),
+    ents: [
+      { id: 'B1', kind: 'bird', look: 'duck', L: .42, leg: .25, u: kf([[0, .93], [12, .9]], 1), Y: K(0), Z: K(11), yaw: kf([[0, 165], [6, 175], [12, 160]]), pose: K('stand'), act: K(.03) },
+      { id: 'B2', kind: 'bird', look: 'heron', L: .36, leg: .5, u: K(.3), Y: K(0), Z: K(17), yaw: kf([[0, -55], [5, -70], [8, -40], [12, -55]]), pose: steps([[0, 'stand'], [6.2, 'preen'], [7.4, 'stand']]), act: steps([[0, .08], [6.2, .2], [7.4, .08]]) },
+      { id: 'B3', kind: 'bird', look: 'heron', L: .36, leg: .5,
+        u: kf([[0, .55], [4.0, .55], [5.2, .6], [8.6, 1.25]]), Y: kf([[0, 0], [4.0, 0], [5.2, .3], [8.6, .5]]), Z: kf([[0, 21], [4, 21], [8.6, 23]]),
+        yaw: kf([[0, 150], [3.5, 150], [4.0, 95], [12, 95]]), pose: steps([[0, 'stand'], [3.7, 'crouch'], [4.0, 'takeoff'], [5.2, 'fly']]),
+        act: kf([[0, 0], [3.6, 0], [3.9, .6], [4.1, 1], [5.2, 1], [6.5, .75], [9, .65]]) },
+      { id: 'B4', kind: 'bird', look: 'plover', L: .26, leg: .4, u: K(.76), Y: K(0), Z: K(27), yaw: kf([[0, 90], [6, 100], [12, 80]]), pose: K('stand'), act: K(.05) },
+      { id: 'B5', kind: 'bird', look: 'plover', L: .26, leg: .4, u: kf([[0, -.05], [6, .16], [12, .16]], 1), Y: K(0), Z: K(15), yaw: kf([[0, 95], [6, 95], [6.6, 135], [12, 140]]), pose: steps([[0, 'walk'], [6, 'stand']]), act: steps([[0, .3], [6, .05]]) }
+    ]
+  },
+  {
+    key: 'bush', name: '枝越しの小鳥', kind: 'bird', f: 400, fno: 5, camH: 1.6, bgZ: 25, motor: 1.2, startZ: 9,
+    desc: '手前 3 m に葉と枝。B1 はいちばん近いが葉に隠れて背中向き。B2 は枝の上でこちらを向いている。5.5 秒ごろ B3 が小さく跳ねて止まり直す。撮りたいのはずっと B2。',
+    ideal: K('B2'),
+    leaves: { id: 'LV', name: '手前の葉', z: 3, circles: [[.12, .2, .09], [.2, .34, .08], [.08, .5, .1], [.27, .5, .06], [.3, .62, .07], [.18, .72, .1], [.36, .44, .05], [.4, .3, .045], [.92, .82, .09], [.84, .9, .08], [.98, .62, .07], [.46, .58, .04]] },
+    perches: [{ z: 7.2, y: 1.45, u0: .05, u1: .55 }, { z: 9.5, y: 1.62, u0: .45, u1: .95 }, { z: 8.5, y: 1.42, u0: .62, u1: 1.0 }, { z: 8.5, y: 1.52, u0: .66, u1: .9 }],
+    ents: [
+      { id: 'B1', kind: 'bird', look: 'tit', L: .14, leg: .25, u: K(.36), Y: K(1.45), Z: K(7.2), yaw: kf([[0, 160], [6, 175], [12, 165]]), pose: K('stand'), act: K(.05) },
+      { id: 'B2', kind: 'bird', look: 'robin', L: .15, leg: .25, u: K(.62), Y: K(1.62), Z: K(9.5), yaw: kf([[0, -35], [3, -20], [6, -45], [9, -25], [12, -35]]), pose: K('stand'), act: K(.06) },
+      { id: 'B3', kind: 'bird', look: 'tit', L: .14, leg: .25,
+        u: kf([[0, .86], [5.5, .86], [6.3, .76], [12, .76]]), Y: kf([[0, 1.42], [5.5, 1.42], [5.9, 1.66], [6.3, 1.52], [12, 1.52]]), Z: K(8.5),
+        yaw: kf([[0, 100], [5.4, 100], [5.6, -80], [6.4, -100], [7.2, -160], [12, -165]]), pose: steps([[0, 'stand'], [5.5, 'takeoff'], [6.3, 'stand']]), act: kf([[0, .05], [5.4, .05], [5.6, .8], [6.2, .8], [6.4, .05]]) }
+    ]
+  },
+  {
+    key: 'flight', name: '飛翔の交差', kind: 'bird', f: 400, fno: 5, camH: 3.0, bgZ: 5000, motor: 0.4, startZ: 30,
+    desc: 'ツルの B1 が画面をゆっくり横切る。3〜7 秒にカモメの B2 が手前を逆向きに横切り、一瞬 B1 を隠す。奥には小さな B3、8 秒から B4 が入ってくる。撮りたいのはずっと B1。',
+    ideal: K('B1'),
+    ents: [
+      { id: 'B1', kind: 'bird', look: 'crane', L: .9, leg: .0, fly: true, u: kf([[0, .3], [12, .72]], 1), Y: t => 2.85 + .08 * Math.sin(t * 1.3), Z: kf([[0, 31], [12, 29]], 1), yaw: K(90), pose: K('fly'), act: K(.45), flapHz: 1.6 },
+      { id: 'B2', kind: 'bird', look: 'gull', L: .5, leg: 0, fly: true, u: kf([[0, 1.35], [3, 1.3], [7, -.35], [12, -.4]], 1), Y: kf([[0, 3.1], [5, 2.95], [12, 2.9]]), Z: K(17), yaw: K(-90), pose: K('fly'), act: K(.35), flapHz: 3.2 },
+      { id: 'B3', kind: 'bird', look: 'gull', L: .5, leg: 0, fly: true, u: kf([[0, .66], [12, 1.05]], 1), Y: t => 3.55 + .1 * Math.sin(t), Z: K(48), yaw: K(90), pose: K('fly'), act: K(.5), flapHz: 3 },
+      { id: 'B4', kind: 'bird', look: 'crane', L: .9, leg: 0, fly: true, u: kf([[0, -.3], [8, -.2], [12, .3]], 1), Y: K(2.45), Z: K(36), yaw: K(90), pose: K('fly'), act: K(.45), flapHz: 1.5 }
+    ]
+  },
+  {
+    key: 'street', name: '街角スナップ', kind: 'person', f: 50, fno: 1, camH: 1.5, bgZ: 40, motor: 3, startZ: 9,
+    desc: 'P1 がこちらに歩いてくる。3〜5.5 秒に通行人 P2 がカメラのすぐ前を横切る。奥には背中向きの P3、スマホを見ている P4。撮りたいのはずっと P1。',
+    ideal: K('P1'),
+    ents: [
+      { id: 'P1', kind: 'person', look: 'a', Hm: 1.72, u: kf([[0, .46], [12, .52]], 1), Y: K(0), Z: kf([[0, 9.5], [12, 5]], 1), yaw: kf([[0, 5], [6, -8], [12, 4]]), pose: K('walk'), act: K(.22), walkHz: 1.8 },
+      { id: 'P2', kind: 'person', look: 'b', Hm: 1.78, u: kf([[0, 1.45], [3, 1.4], [5.6, -.45], [12, -.5]], 1), Y: K(0), Z: K(2.6), yaw: K(-90), pose: K('walk'), act: K(.25), walkHz: 2 },
+      { id: 'P3', kind: 'person', look: 'c', Hm: 1.62, u: K(.17), Y: K(0), Z: K(14), yaw: kf([[0, 175], [6, 165], [12, 178]]), pose: K('stand'), act: K(.02) },
+      { id: 'P4', kind: 'person', look: 'f', Hm: 1.68, u: K(.79), Y: K(0), Z: K(12), yaw: kf([[0, 20], [6, 30], [12, 15]]), pose: K('phone'), act: K(.03) }
+    ]
+  },
+  {
+    key: 'dance', name: 'ダンスのジャンプ', kind: 'person', f: 70, fno: 3, camH: 1.3, bgZ: 22, motor: 2, startZ: 8.5,
+    desc: '4 人のダンサー。ふだんはセンターの P1、3 秒に左の P2 がジャンプ、7 秒に右端の P4 が回転ジャンプ。撮りたいのは「ジャンプした人、それ以外はセンター」。',
+    ideal: steps([[0, 'P1'], [2.9, 'P2'], [4.3, 'P1'], [6.9, 'P4'], [8.6, 'P1']]),
+    ents: [
+      { id: 'P1', kind: 'person', look: 'e', Hm: 1.7, u: t => .5 + .012 * Math.sin(t * 2.4), Y: K(0), Z: K(8.5), yaw: t => 6 * Math.sin(t * 1.2), pose: K('sway'), act: K(.2) },
+      { id: 'P2', kind: 'person', look: 'd', Hm: 1.66, u: t => .26 + .01 * Math.sin(t * 2.4 + 1), Y: kf([[0, 0], [3.1, 0], [3.45, .62], [3.8, 0], [12, 0]]), Z: K(9.6), yaw: K(15),
+        pose: steps([[0, 'sway'], [2.95, 'crouch'], [3.1, 'jump'], [3.8, 'crouch'], [4.0, 'sway']]), act: kf([[0, .2], [2.9, .2], [3.05, .9], [3.3, 1], [3.8, 1], [4.1, .2]]) },
+      { id: 'P3', kind: 'person', look: 'c', Hm: 1.64, u: t => .72 + .01 * Math.sin(t * 2.4 + 2), Y: K(0), Z: K(9.1), yaw: K(-12), pose: K('sway'), act: K(.2) },
+      { id: 'P4', kind: 'person', look: 'b', Hm: 1.76, u: t => .9 + .008 * Math.sin(t * 2.4 + 3), Y: kf([[0, 0], [7.15, 0], [7.6, .55], [8.05, 0], [12, 0]]), Z: K(10.5),
+        yaw: kf([[0, -25], [7.0, -25], [8.1, 335], [12, 335]], 1), pose: steps([[0, 'sway'], [6.95, 'crouch'], [7.15, 'jump'], [8.05, 'crouch'], [8.3, 'sway']]), act: kf([[0, .2], [6.9, .2], [7.1, .9], [7.4, 1], [8.1, 1], [8.4, .2]]) }
+    ]
+  }
+];
+
+function normYaw(y) { y = ((y + 180) % 360 + 360) % 360 - 180; return y; }
+
+// 楕円の中のサンプル点（単位円）
+const DISK = [[0, 0]];
+for (let i = 0; i < 6; i++) DISK.push([.5 * Math.cos(i * Math.PI / 3), .5 * Math.sin(i * Math.PI / 3)]);
+for (let i = 0; i < 8; i++) DISK.push([.88 * Math.cos(i * Math.PI / 4 + .3), .88 * Math.sin(i * Math.PI / 4 + .3)]);
+
+function inEll(px, py, e) { const dx = (px - e.x) / e.rx, dy = (py - e.y) / e.ry; return dx * dx + dy * dy <= 1; }
+
+// 1 体ぶんの幾何（画面座標）を計算
+function geom(scene, e, t) {
+  const st = { id: e.id, kind: e.kind, u: e.u(t), Y: e.Y(t), Z: e.Z(t), yaw: normYaw(e.yaw(t)), pose: e.pose(t), act: e.act(t) };
+  const s = scene.f * PX_PER_MM / st.Z;     // 1 m が何画素か
+  st.s = s;
+  const x = st.u * W;
+  const proj = h => H / 2 - scene.f * (h - scene.camH) / st.Z * PX_PER_MM;
+  const ay = Math.abs(st.yaw);
+  st.view = ay < 35 ? 'front' : ay > 145 ? 'back' : 'side';
+  st.dir = st.yaw >= 0 ? 1 : -1;
+  const shapes = [];
+  if (e.kind === 'bird') {
+    const L = e.L * s;
+    st.flap = (e.flapHz || 7) * t * Math.PI * 2;
+    const crouch = st.pose === 'crouch' ? .06 : 0;
+    const cy = proj(st.Y + (e.leg + .2 - crouch) * e.L);
+    st.cx = x; st.cy = cy; st.Lpx = L;
+    let head;
+    if (st.view === 'side') {
+      shapes.push({ x, y: cy, rx: .45 * L, ry: .2 * L, part: 'body' });
+      const hx = st.pose === 'preen' ? x + st.dir * .2 * L : x + st.dir * .4 * L;
+      const hy = st.pose === 'preen' ? cy - .05 * L : cy - .22 * L;
+      head = { x: hx, y: hy, rx: .13 * L, ry: .13 * L, part: 'head' };
+      st.eye = { x: hx + st.dir * .05 * L, y: hy - .03 * L, r: .03 * L };
+      if (st.pose === 'preen') st.eye = null;
+    } else {
+      shapes.push({ x, y: cy, rx: .25 * L, ry: .24 * L, part: 'body' });
+      head = { x, y: cy - .3 * L, rx: .13 * L, ry: .13 * L, part: 'head' };
+      st.eye = st.view === 'front' ? { x, y: cy - .32 * L, r: .03 * L } : null;
+    }
+    shapes.push(head);
+    if (st.pose === 'fly' || st.pose === 'takeoff') {
+      const sp = Math.sin(st.flap);
+      if (st.view === 'side') {
+        // 描画の wing() と同じ回転で、翼の中ほどに楕円を置く
+        const a = sp * .9, px = -.2 * L, py = -.28 * L;
+        const rx = px * Math.cos(a) + py * Math.sin(a), ry = -px * Math.sin(a) + py * Math.cos(a);
+        shapes.push({ x: x - .02 * L * st.dir + rx * st.dir, y: cy - .1 * L + ry, rx: .24 * L, ry: .2 * L, part: 'wing' });
+      }
+      else shapes.push({ x, y: cy - .1 * L, rx: .9 * L, ry: .18 * L, part: 'wing' });
+    }
+    st.headR = .13 * L;
+    st.hpx = (e.leg + .55) * L * .9;
+  } else {
+    const Hm = e.Hm, hp = Hm * s;
+    const lift = st.Y;
+    const crouch = st.pose === 'crouch' ? .06 : 0;
+    const feet = proj(lift);
+    const top = proj(lift + Hm * (1 - crouch));
+    const hh = feet - top;
+    st.cx = x; st.feet = feet; st.top = top; st.hh = hh;
+    const wide = st.view === 'side' ? .085 : .13;
+    const headY = top + .07 * hh;
+    shapes.push({ x, y: headY, rx: .07 * hh, ry: .075 * hh, part: 'head' });
+    shapes.push({ x, y: top + .33 * hh, rx: wide * hh, ry: .19 * hh, part: 'body' });
+    shapes.push({ x, y: top + .72 * hh, rx: (wide - .03) * hh, ry: .27 * hh, part: 'body' });
+    st.headR = .07 * hh;
+    st.eye = st.view === 'back' ? null : { x: x + (st.view === 'side' ? st.dir * .035 * hh : 0), y: headY, r: .012 * hh };
+    st.hpx = hh;
+  }
+  st.shapes = shapes;
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  for (const sh of shapes) { x0 = Math.min(x0, sh.x - sh.rx); x1 = Math.max(x1, sh.x + sh.rx); y0 = Math.min(y0, sh.y - sh.ry); y1 = Math.max(y1, sh.y + sh.ry); }
+  if (e.kind === 'person') y1 = Math.max(y1, st.feet);
+  st.box = [x0, y0, x1, y1];
+  return st;
+}
+
+function leafCircles(scene) {
+  return scene.leaves ? scene.leaves.circles.map(([u, v, r]) => ({ x: u * W, y: v * H, rx: r * W, ry: r * W })) : [];
+}
+
+// 露出度：自分の楕円の中のサンプル点が画面内で、手前の物に隠れていない割合
+function visibility(st, all, leaves, leafZ) {
+  let n = 0, vis = 0, hn = 0, hv = 0;
+  for (const sh of st.shapes) {
+    for (const [dx, dy] of DISK) {
+      const px = sh.x + dx * sh.rx, py = sh.y + dy * sh.ry;
+      n++; if (sh.part === 'head') hn++;
+      if (px < 0 || px > W || py < 0 || py > H) continue;
+      let hid = false;
+      for (const o of all) {
+        if (o === st || o.Z >= st.Z) continue;
+        for (const s2 of o.shapes) if (inEll(px, py, s2)) { hid = true; break; }
+        if (hid) break;
+      }
+      if (!hid && leafZ < st.Z) for (const c of leaves) if (inEll(px, py, c)) { hid = true; break; }
+      if (!hid) { vis++; if (sh.part === 'head') hv++; }
+    }
+  }
+  st.vis = vis / n; st.headVis = hn ? hv / hn : 0;
+}
+
+function tolOf(scene, fno) { const f = scene.f / 1000; return 0.03e-3 * fno / (f * f); }
+function blurPx(scene, fno, Z, lensD) {
+  const f = scene.f / 1000;
+  const cocMm = (f * f / fno) * Math.abs(1 / Z - lensD) * 1000;
+  return cocMm * PX_PER_MM;   // ボケの直径（画素）
+}
+
+function makeSim(sceneIdx, cfg, seed) {
+  const scene = SCENES[sceneIdx];
+  const sim = {
+    scene, sceneIdx, cfg, rng: rngFrom(seed || 12345), frame: 0, t: 0,
+    lensD: 1 / scene.startZ, cmdQ: [], est: null, cur: null, kTrust: 1, pendId: null, pendN: 0, lostN: 0,
+    tracks: {}, states: [], cands: [], scoreMap: {}, log: [], done: false,
+    leaves: leafCircles(scene),
+    hist: { cur: [], ideal: [], idealOk: [], match: [], focus: [], scores: {}, lens: [] },
+    switches: 0, idealChanges: [], lastIdeal: null
+  };
+  for (let i = 0; i < LAT; i++) sim.cmdQ.push(sim.lensD);
+  for (const e of scene.ents) sim.hist.scores[e.id] = [];
+  if (scene.leaves) sim.hist.scores[scene.leaves.id] = [];
+  return sim;
+}
+
+function weightsOf(cfg) { return cfg.preset === 'custom' ? cfg.custom : PRESETS[cfg.preset].w; }
+
+function stepSim(sim) {
+  if (sim.done) return;
+  const { scene, cfg, rng } = sim;
+  const t = sim.t = sim.frame * DT;
+  const fno = FNOS[cfg.fnoIdx];
+  const tol = tolOf(scene, fno);
+  const states = scene.ents.map(e => geom(scene, e, t));
+  const leafZ = scene.leaves ? scene.leaves.z : 1e9;
+  for (const st of states) visibility(st, states, sim.leaves, leafZ);
+  sim.states = states;
+  const s = sens(cfg);
+  const raw = !!PRESETS[cfg.preset] && PRESETS[cfg.preset].raw;
+
+  // ——— 検出と手がかり
+  const cands = [];
+  for (const st of states) {
+    const tr = sim.tracks[st.id] || (sim.tracks[st.id] = { px: st.cx, py: st.cy ?? (st.top + st.feet) / 2, A: 0, seen: undefined, seenF: -99, last: null });
+    const b = blurPx(scene, fno, st.Z, sim.lensD);
+    st.blur = b;
+    const cy = st.cy ?? (st.top + st.feet) / 2;
+    const speed = Math.hypot(st.cx - tr.px, cy - tr.py) / DT;   // 画素/秒
+    tr.px = st.cx; tr.py = cy;
+    if (raw) continue;
+    let p = 0;
+    const tracked = tr.seen !== undefined && sim.frame - tr.seenF <= 5;
+    if (st.vis >= .2 && st.hpx >= 10) {
+      p = clamp(.35 + (st.vis - .2) * 1.6, 0, .98);
+      if (b > .35 * st.hpx) p *= .6;
+      if (tracked) p = Math.max(p, .97);   // 一度捕まえた被写体は追跡器が保持する
+    } else if (tracked && st.vis >= .1) p = .9;
+    const det = rng() < p;
+    st.det = det;
+    if (!det) {
+      // 数コマの取りこぼしは前の手がかりで穴埋め（コースティング）
+      if (tracked && tr.last && st.vis > .02) {
+        const c0 = tr.last;
+        cands.push({ id: st.id, st, measD: c0.measD, coast: true, f: { ...c0.f, K: st.id === sim.cur ? sim.kTrust : 0, R: Math.exp(-Math.abs(c0.measD - sim.lensD) / (10 * tol)) } });
+      }
+      continue;
+    }
+    tr.seenF = sim.frame; tr.seen = true;
+    const measD = 1 / st.Z + gauss(rng) * .25 * tol * (1 + Math.abs(1 / st.Z - sim.lensD) / (6 * tol));
+    const eyeOk = st.eye && st.headVis >= .5 && st.eye.r * 2 >= 1.6 && b < st.headR * 2 && Math.abs(st.yaw) < 120;
+    const eye = eyeOk && rng() < .92;
+    st.eyeDet = eye;
+    const facing = (1 + Math.cos(st.yaw * Math.PI / 180)) / 2 * Math.min(1, st.headVis * 1.4);
+    const actObs = clamp(st.act + gauss(rng) * .04, 0, 1);
+    const mot = clamp(speed / Math.max(st.hpx, 1) / 2, 0, 1);
+    tr.A = tr.A * .7 + clamp(.8 * actObs + .2 * mot, 0, 1) * .3;
+    const af = cfg.af;
+    const dx = (st.cx - af.u * W) / W, dy = (cy - af.v * H) / W;
+    tr.last = {
+      id: st.id, st, measD,
+      f: {
+        S: clamp(Math.sqrt(st.hpx / (.6 * H)), 0, 1),
+        N: 0,
+        C: Math.exp(-(dx * dx + dy * dy) / (2 * .18 * .18)),
+        E: eye ? 1 : .3 * facing,
+        F: facing,
+        V: st.vis,
+        A: tr.A,
+        R: Math.exp(-Math.abs(measD - sim.lensD) / (10 * tol)),
+        K: st.id === sim.cur ? sim.kTrust : 0
+      }
+    };
+    cands.push(tr.last);
+  }
+
+  // ——— 至近優先（検出なし）：中央の広いエリア内で最も手前の物
+  if (raw) {
+    const zone = [.15 * W, .12 * H, .85 * W, .88 * H];
+    const objs = [];
+    for (const st of states) {
+      if (st.vis < .08) continue;
+      const [x0, y0, x1, y1] = st.box;
+      if (x1 < zone[0] || x0 > zone[2] || y1 < zone[1] || y0 > zone[3]) continue;
+      objs.push({ id: st.id, Z: st.Z });
+    }
+    if (scene.leaves) {
+      const inZone = sim.leaves.some(c => c.x + c.rx * .5 > zone[0] && c.x - c.rx * .5 < zone[2] && c.y + c.ry * .5 > zone[1] && c.y - c.ry * .5 < zone[3]);
+      if (inZone) objs.push({ id: scene.leaves.id, Z: scene.leaves.z });
+    }
+    for (const o of objs) {
+      const D = 1 / o.Z + gauss(rng) * .25 * tol;
+      cands.push({ id: o.id, st: states.find(x => x.id === o.id) || null, measD: D, f: { S: 0, N: 0, C: 0, E: 0, F: 0, V: 0, A: 0, R: 0, K: o.id === sim.cur ? 1 : 0 } });
+    }
+  }
+
+  // 近さ：候補の中での順位
+  if (cands.length) {
+    const ds = cands.map(c => c.measD);
+    const mn = Math.min(...ds), mx = Math.max(...ds);
+    for (const c of cands) c.f.N = mx - mn < 1e-9 ? 1 : (c.measD - mn) / (mx - mn);
+  }
+  const w = raw ? { N: 1 } : weightsOf(cfg);
+  let wsum = 0; for (const [k] of FEATS) wsum += (w[k] || 0);
+  for (const c of cands) {
+    let sc = 0; for (const [k] of FEATS) sc += (w[k] || 0) * c.f[k];
+    c.score = wsum > 0 ? sc / wsum : 0;
+  }
+  cands.sort((a, b) => b.score - a.score);
+  sim.cands = cands;
+  // 継続ボーナスの減衰：K 以外の手がかりで、いまの被写体より良い候補がいる間は 1 秒かけて 0 に
+  if (sim.cur && wsum > 0) {
+    const noK = c => c.score - (w.K || 0) * c.f.K / wsum;
+    const cc = cands.find(c => c.id === sim.cur);
+    const better = cc && cands.some(c => c.id !== sim.cur && noK(c) > noK(cc));
+    sim.kTrust = better ? Math.max(0, sim.kTrust - DT / 1.0) : Math.min(1, sim.kTrust + DT / 0.5);
+  }
+  sim.scoreMap = {};
+  for (const c of cands) sim.scoreMap[c.id] = c.score;
+
+  // ——— 乗り移り判定
+  const curC = cands.find(c => c.id === sim.cur);
+  const best = cands[0];
+  const margin = raw ? .02 : s.margin, confirm = raw ? 3 : s.confirm;
+  if (!sim.cur) {
+    if (best && sim.frame >= 8) switchTo(sim, best, null, '最初の選択');
+  } else if (!curC) {
+    sim.lostN++;
+    sim.pendId = null; sim.pendN = 0;
+    if (sim.lostN === 1) addLog(sim, `${sim.cur} を見失った（ピントを保持して待つ）`, 'warn');
+    if (sim.lostN > s.hold && best) switchTo(sim, best, null, '見失ったので乗り移り');
+  } else {
+    if (sim.lostN > 0) { addLog(sim, `${sim.cur} を再び捕捉`, 'ok'); }
+    sim.lostN = 0;
+    if (best && best.id !== sim.cur && best.score > curC.score + margin) {
+      if (sim.pendId === best.id) sim.pendN++; else { sim.pendId = best.id; sim.pendN = 1; }
+      if (sim.pendN >= confirm) switchTo(sim, best, curC);
+    } else { sim.pendId = null; sim.pendN = 0; }
+  }
+
+  // ——— 位相差AF とレンズ
+  const sel = cands.find(c => c.id === sim.cur);
+  if (sel) {
+    const m = sel.measD;
+    if (!sim.est) sim.est = { D: m, v: 0 };
+    else {
+      const pred = sim.est.D + sim.est.v * DT;
+      const r = m - pred;
+      sim.est.D = pred + .5 * r;
+      sim.est.v = clamp(sim.est.v + .1 * r / DT, -2, 2);
+    }
+  } else if (sim.est) {
+    sim.est.v *= .9;
+    sim.est.D += sim.est.v * DT;
+  }
+  const cmd = sim.est ? sim.est.D + sim.est.v * (LAT + 1) * DT : sim.lensD;
+  sim.cmdQ.push(cmd);
+  const tgt = sim.cmdQ.shift();
+  const maxStep = scene.motor * DT;
+  sim.lensD += clamp(tgt - sim.lensD, -maxStep, maxStep);
+
+  // ——— 評価
+  const idealId = scene.ideal(t);
+  if (idealId !== sim.lastIdeal) { sim.idealChanges.push({ t, id: idealId, reached: null, run: 0 }); sim.lastIdeal = idealId; }
+  const ist = states.find(x => x.id === idealId);
+  const idealOk = ist && ist.vis >= .3;
+  const match = sim.cur === idealId;
+  const inFocus = ist ? Math.abs(sim.lensD - 1 / ist.Z) <= tol : false;
+  const ic = sim.idealChanges[sim.idealChanges.length - 1];
+  if (ic.reached === null) { ic.run = match ? ic.run + 1 : 0; if (ic.run >= 5) ic.reached = t - 4 * DT - ic.t; }
+  const h = sim.hist;
+  h.cur.push(sim.cur); h.ideal.push(idealId); h.idealOk.push(idealOk); h.match.push(match); h.focus.push(inFocus); h.lens.push(sim.lensD);
+  for (const id in h.scores) h.scores[id].push(sim.scoreMap[id] ?? NaN);
+  sim.status = { idealId, idealOk, match, inFocus };
+
+  sim.frame++;
+  if (sim.frame >= DUR * FPS) sim.done = true;
+}
+
+function sens(cfg) { const i = cfg.sens - 1; return { margin: SENS.margin[i], confirm: SENS.confirm[i], hold: SENS.hold[i] }; }
+
+function switchTo(sim, c, old, why) {
+  const prev = sim.cur;
+  sim.cur = c.id; sim.pendId = null; sim.pendN = 0; sim.lostN = 0; sim.kTrust = 1;
+  sim.est = { D: c.measD, v: 0 };
+  if (prev) sim.switches++;
+  if (!why && old) {
+    const w = sim.cfg.preset === 'raw' ? { N: 1 } : weightsOf(sim.cfg);
+    let bk = null, bv = -1e9;
+    for (const [k] of FEATS) { if (k === 'K') continue; const d = (w[k] || 0) * (c.f[k] - old.f[k]); if (d > bv) { bv = d; bk = k; } }
+    const nm = FEATS.find(x => x[0] === bk)[1];
+    why = `決め手：${nm}`;
+  }
+  const idealId = sim.scene.ideal(sim.frame * DT);
+  const kind = c.id === idealId ? 'ok' : 'bad';
+  addLog(sim, prev ? `${prev} → ${c.id} に乗り移り（${why}）` : `${c.id} を選択（${why}）`, kind);
+}
+
+function addLog(sim, msg, kind) { sim.log.push({ t: sim.frame * DT, msg, kind }); }
+
+function metrics(sim) {
+  const h = sim.hist;
+  let n = 0, m = 0, f = 0;
+  for (let i = 0; i < h.cur.length; i++) if (h.idealOk[i]) { n++; if (h.match[i]) m++; if (h.focus[i]) f++; }
+  const lags = sim.idealChanges.filter(c => c.reached !== null).map(c => c.reached);
+  const miss = sim.idealChanges.filter(c => c.reached === null).length;
+  return {
+    match: n ? m / n : NaN, focus: n ? f / n : NaN, switches: sim.switches,
+    lag: lags.length ? lags.reduce((a, b) => a + b, 0) / lags.length : NaN, miss
+  };
+}
+
+function runAll(sceneIdx, cfg) {
+  const sim = makeSim(sceneIdx, cfg, 777 + sceneIdx);
+  while (!sim.done) stepSim(sim);
+  return metrics(sim);
+}
+// CORE-END
+</script>
+
+<script>
+// ———— 描画と UI
+const $ = id => document.getElementById(id);
+const vf = $('vf'), ctx = vf.getContext('2d');
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const ENT_COLORS = ['--c1', '--c2', '--c3', '--c4', '--c5', '--c6'];
+function entColor(id) {
+  if (id === 'LV') return css('--c7');
+  const n = parseInt(id.slice(1), 10) - 1;
+  return css(ENT_COLORS[n % ENT_COLORS.length]);
+}
+
+const cfg = { preset: 'smart', custom: { ...PRESETS.smart.w }, sens: 3, fnoIdx: 5, af: { u: .5, v: .5 } };
+let sceneIdx = 0, sim = null, playing = true, rate = 1, acc = 0, lastTs = null, logShown = 0;
+
+// ctx.filter が使えるか
+const FILTER_OK = (() => { try { const c = document.createElement('canvas').getContext('2d'); c.filter = 'blur(2px)'; return c.filter === 'blur(2px)'; } catch (e) { return false; } })();
+
+function withBlur(c, b, draw) {
+  const r = Math.min(b / 2.2, 26);
+  if (r < .35) { draw(c); return; }
+  if (FILTER_OK) { c.save(); c.filter = `blur(${r.toFixed(2)}px)`; draw(c); c.restore(); return; }
+  c.save();
+  const n = 6; c.globalAlpha = 1 / 2.4;
+  draw(c);
+  for (let i = 0; i < n; i++) { c.save(); c.translate(Math.cos(i * Math.PI / 3) * r * .7, Math.sin(i * Math.PI / 3) * r * .7); c.globalAlpha = .28; draw(c); c.restore(); }
+  c.restore();
+}
+
+// ——— 背景（ボケ量ごとに事前描画）
+const BG_LEVELS = [0, 1.5, 3, 5, 8, 12, 17, 24];
+let bgCache = null;
+function drawBackground(c, scene) {
+  const g = c.createLinearGradient(0, 0, 0, H);
+  if (scene.key === 'shore') {
+    g.addColorStop(0, '#b9cfdc'); g.addColorStop(.38, '#dfe7e4'); g.addColorStop(.42, '#7e8f74'); g.addColorStop(.47, '#6a7f74'); g.addColorStop(1, '#3f5c62');
+    c.fillStyle = g; c.fillRect(0, 0, W, H);
+    const r = rngFrom(3);
+    c.fillStyle = '#5f7059';
+    for (let i = 0; i < 90; i++) { const x = r() * W, h = 10 + r() * 30; c.fillRect(x, H * .42 - h, 2 + r() * 3, h); }
+    c.strokeStyle = 'rgba(230,240,240,.18)'; c.lineWidth = 1.5;
+    for (let i = 0; i < 60; i++) { const y = H * .48 + Math.pow(r(), 1.6) * H * .52, x = r() * W, l = 20 + (y / H) * 80; c.beginPath(); c.moveTo(x, y); c.lineTo(x + l, y); c.stroke(); }
+  } else if (scene.key === 'bush') {
+    g.addColorStop(0, '#6f8a5c'); g.addColorStop(.5, '#4f6b45'); g.addColorStop(1, '#384f35');
+    c.fillStyle = g; c.fillRect(0, 0, W, H);
+    const r = rngFrom(5);
+    for (let i = 0; i < 120; i++) { c.fillStyle = `rgba(${120 + r() * 60},${150 + r() * 50},${90 + r() * 40},.35)`; c.beginPath(); c.arc(r() * W, r() * H, 8 + r() * 26, 0, 7); c.fill(); }
+    for (let i = 0; i < 25; i++) { c.fillStyle = 'rgba(230,240,200,.25)'; c.beginPath(); c.arc(r() * W, r() * H * .6, 4 + r() * 10, 0, 7); c.fill(); }
+  } else if (scene.key === 'flight') {
+    g.addColorStop(0, '#5f8fc4'); g.addColorStop(.7, '#a9c6e0'); g.addColorStop(1, '#d6e2ea');
+    c.fillStyle = g; c.fillRect(0, 0, W, H);
+    const r = rngFrom(9);
+    for (let i = 0; i < 14; i++) { const x = r() * W, y = H * (.15 + r() * .7), s = 30 + r() * 70; c.fillStyle = 'rgba(255,255,255,.35)'; for (let k = 0; k < 5; k++) { c.beginPath(); c.ellipse(x + (k - 2) * s * .45, y + (r() - .5) * s * .2, s * .5, s * .22, 0, 0, 7); c.fill(); } }
+  } else if (scene.key === 'street') {
+    g.addColorStop(0, '#c8d3da'); g.addColorStop(.62, '#aeb8bd'); g.addColorStop(.63, '#8d8a84'); g.addColorStop(1, '#6f6a63');
+    c.fillStyle = g; c.fillRect(0, 0, W, H);
+    const r = rngFrom(11);
+    let x = -20;
+    while (x < W) { const bw = 70 + r() * 110, bh = H * (.35 + r() * .35); c.fillStyle = ['#9c8c7a', '#7d8892', '#b3a089', '#6f7a70', '#a3a8ad'][Math.floor(r() * 5)]; c.fillRect(x, H * .63 - bh, bw, bh);
+      c.fillStyle = 'rgba(40,50,60,.35)'; for (let yy = H * .63 - bh + 14; yy < H * .58; yy += 26) for (let xx = x + 10; xx < x + bw - 16; xx += 22) c.fillRect(xx, yy, 12, 15);
+      c.fillStyle = ['#c4573f', '#3c6b8f', '#d7b14a'][Math.floor(r() * 3)]; c.fillRect(x + 6, H * .55, bw - 12, 10);
+      x += bw + 4; }
+  } else {
+    g.addColorStop(0, '#1d1830'); g.addColorStop(.7, '#3a2d52'); g.addColorStop(.72, '#4a3a3a'); g.addColorStop(1, '#2a2222');
+    c.fillStyle = g; c.fillRect(0, 0, W, H);
+    const r = rngFrom(13);
+    for (let i = 0; i < 9; i++) { const x = (i + .5) * W / 9; const gg = c.createRadialGradient(x, 30, 2, x, 30, 120); gg.addColorStop(0, 'rgba(255,220,170,.55)'); gg.addColorStop(1, 'rgba(255,220,170,0)'); c.fillStyle = gg; c.fillRect(x - 120, 0, 240, 200); }
+    for (let i = 0; i < 40; i++) { c.fillStyle = `rgba(${150 + r() * 100},${80 + r() * 80},${200},.25)`; c.beginPath(); c.arc(r() * W, H * (.2 + r() * .4), 3 + r() * 9, 0, 7); c.fill(); }
+  }
+}
+function buildBg(scene) {
+  const base = document.createElement('canvas'); base.width = W; base.height = H;
+  drawBackground(base.getContext('2d'), scene);
+  bgCache = BG_LEVELS.map(b => {
+    if (b === 0) return base;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    if (FILTER_OK) { c.filter = `blur(${b}px)`; c.drawImage(base, -b * 2, -b * 2, W + b * 4, H + b * 4); }
+    else { const k = Math.max(1, b / 1.5); const sm = document.createElement('canvas'); sm.width = Math.ceil(W / k); sm.height = Math.ceil(H / k); sm.getContext('2d').drawImage(base, 0, 0, sm.width, sm.height); c.imageSmoothingEnabled = true; c.drawImage(sm, 0, 0, W, H); }
+    return cv;
+  });
+}
+
+// ——— 鳥と人の描画
+function ell(c, x, y, rx, ry, rot) { c.beginPath(); c.ellipse(x, y, Math.max(rx, .1), Math.max(ry, .1), rot || 0, 0, Math.PI * 2); c.fill(); }
+function drawBird(c, e, st) {
+  const L = st.Lpx, x = st.cx, y = st.cy, d = st.dir, P = LOOK[e.look];
+  const flying = st.pose === 'fly' || st.pose === 'takeoff';
+  const sp = Math.sin(st.flap);
+  c.lineCap = 'round';
+  if (st.view === 'side') {
+    if (!flying && e.leg > 0) {
+      c.strokeStyle = P.leg; c.lineWidth = Math.max(1, .035 * L);
+      const ll = (e.leg + .02) * L, ph = st.pose === 'walk' ? Math.sin(sim.t * 9) * .12 * L : 0;
+      const crouch = st.pose === 'crouch' ? .7 : 1;
+      c.beginPath(); c.moveTo(x - .02 * L * d, y + .15 * L); c.lineTo(x - .02 * L * d + ph, y + .15 * L + ll * crouch);
+      c.moveTo(x + .06 * L * d, y + .15 * L); c.lineTo(x + .06 * L * d - ph, y + .15 * L + ll * crouch); c.stroke();
+    }
+    if (flying) { c.fillStyle = P.wing; c.globalAlpha = .75; wing(c, x + .05 * L * d, y - .08 * L, L, d, -sp * .8 + .2); c.globalAlpha = 1; }
+    c.fillStyle = P.wing;
+    c.beginPath(); c.moveTo(x - .38 * L * d, y - .05 * L); c.lineTo(x - .7 * L * d, y - .1 * L + (flying ? .03 * L : 0)); c.lineTo(x - .66 * L * d, y + .07 * L); c.closePath(); c.fill();
+    c.fillStyle = P.body; ell(c, x, y, .45 * L, .2 * L);
+    c.fillStyle = P.belly; ell(c, x + .05 * L * d, y + .08 * L, .34 * L, .1 * L);
+    const preen = st.pose === 'preen';
+    const hx = preen ? x + d * .2 * L : x + d * .4 * L, hy = preen ? y - .05 * L : y - .22 * L;
+    if (!preen) { c.fillStyle = P.body; c.beginPath(); c.moveTo(x + .25 * L * d, y - .12 * L); c.lineTo(hx - .05 * L * d, hy - .08 * L); c.lineTo(hx + .02 * L * d, hy + .1 * L); c.lineTo(x + .35 * L * d, y + .02 * L); c.closePath(); c.fill(); }
+    if (!flying) { c.fillStyle = P.wing; ell(c, x - .06 * L * d, y - .02 * L, .3 * L, .12 * L, -.08 * d); }
+    else { c.fillStyle = P.wing; wing(c, x - .02 * L * d, y - .1 * L, L, d, sp * .9); }
+    c.fillStyle = P.head; ell(c, hx, hy, .13 * L, .13 * L);
+    c.fillStyle = P.cap; ell(c, hx, hy - .06 * L, .11 * L, .06 * L);
+    c.fillStyle = P.beak;
+    if (preen) { c.beginPath(); c.moveTo(hx - .05 * L * d, hy + .02 * L); c.lineTo(hx - .22 * L * d, hy + .08 * L); c.lineTo(hx - .05 * L * d, hy + .08 * L); c.closePath(); c.fill(); }
+    else { c.beginPath(); c.moveTo(hx + .1 * L * d, hy - .03 * L); c.lineTo(hx + .32 * L * d, hy + .01 * L); c.lineTo(hx + .1 * L * d, hy + .04 * L); c.closePath(); c.fill();
+      c.fillStyle = '#111'; ell(c, hx + .05 * L * d, hy - .03 * L, .032 * L, .032 * L); c.fillStyle = 'rgba(255,255,255,.85)'; ell(c, hx + .06 * L * d, hy - .042 * L, .011 * L, .011 * L); }
+  } else {
+    if (!flying && e.leg > 0) { c.strokeStyle = P.leg; c.lineWidth = Math.max(1, .035 * L); const ll = (e.leg + .02) * L; c.beginPath(); c.moveTo(x - .07 * L, y + .2 * L); c.lineTo(x - .07 * L, y + .15 * L + ll); c.moveTo(x + .07 * L, y + .2 * L); c.lineTo(x + .07 * L, y + .15 * L + ll); c.stroke(); }
+    if (flying) { c.fillStyle = P.wing; c.save(); c.translate(x, y - .1 * L); for (const s2 of [-1, 1]) { c.save(); c.scale(s2, 1); c.rotate(-sp * .5); ell(c, .48 * L, 0, .45 * L, .1 * L); c.restore(); } c.restore(); }
+    c.fillStyle = st.view === 'back' ? P.wing : P.body; ell(c, x, y, .25 * L, .24 * L);
+    if (st.view === 'front') { c.fillStyle = P.belly; ell(c, x, y + .05 * L, .17 * L, .17 * L); }
+    else { c.fillStyle = P.wing; c.beginPath(); c.moveTo(x - .08 * L, y + .18 * L); c.lineTo(x, y + .42 * L); c.lineTo(x + .08 * L, y + .18 * L); c.fill(); }
+    c.fillStyle = st.view === 'back' ? P.cap : P.head; ell(c, x, y - .3 * L, .13 * L, .13 * L);
+    if (st.view === 'front') {
+      c.fillStyle = P.cap; ell(c, x, y - .37 * L, .11 * L, .05 * L);
+      c.fillStyle = '#111'; ell(c, x - .055 * L, y - .32 * L, .026 * L, .026 * L); ell(c, x + .055 * L, y - .32 * L, .026 * L, .026 * L);
+      c.fillStyle = P.beak; c.beginPath(); c.moveTo(x - .03 * L, y - .28 * L); c.lineTo(x, y - .2 * L); c.lineTo(x + .03 * L, y - .28 * L); c.fill();
+    }
+  }
+}
+function wing(c, x, y, L, d, a) {
+  c.save(); c.translate(x, y); c.scale(d, 1); c.rotate(-a);
+  c.beginPath(); c.moveTo(.14 * L, 0); c.quadraticCurveTo(-.02 * L, -.4 * L, -.42 * L, -.62 * L); c.quadraticCurveTo(-.26 * L, -.22 * L, -.3 * L, .04 * L); c.closePath(); c.fill();
+  c.restore();
+}
+function drawPerson(c, e, st) {
+  const S = STYLE[e.look], x = st.cx, top = st.top, hh = st.hh, d = st.dir;
+  const side = st.view === 'side';
+  const wv = side ? .085 : .13;
+  const t = sim.t;
+  c.lineCap = 'round';
+  const legW = Math.max(2, .075 * hh), armW = Math.max(1.5, .05 * hh);
+  const hipY = top + .5 * hh, footY = top + hh;
+  let swing = 0;
+  if (st.pose === 'walk') swing = Math.sin(t * (e.walkHz || 1.8) * Math.PI * 2) * .1 * hh;
+  if (st.pose === 'sway') swing = Math.sin(t * 2.4) * .02 * hh;
+  c.strokeStyle = S.bottom; c.lineWidth = legW;
+  c.beginPath();
+  if (st.pose === 'jump') {
+    c.moveTo(x - .04 * hh, hipY); c.lineTo(x - .12 * hh, hipY + .22 * hh); c.lineTo(x - .05 * hh, footY - .08 * hh);
+    c.moveTo(x + .04 * hh, hipY); c.lineTo(x + .12 * hh, hipY + .22 * hh); c.lineTo(x + .05 * hh, footY - .08 * hh);
+  } else if (side) {
+    c.moveTo(x, hipY); c.lineTo(x + swing * d, footY); c.moveTo(x, hipY); c.lineTo(x - swing * d, footY);
+  } else {
+    const k = st.pose === 'crouch' ? .05 * hh : 0;
+    c.moveTo(x - .045 * hh, hipY); c.lineTo(x - .05 * hh - k, hipY + .25 * hh); c.lineTo(x - .05 * hh + swing * .3, footY);
+    c.moveTo(x + .045 * hh, hipY); c.lineTo(x + .05 * hh + k, hipY + .25 * hh); c.lineTo(x + .05 * hh - swing * .3, footY);
+  }
+  c.stroke();
+  // 腕
+  c.strokeStyle = S.top; c.lineWidth = armW;
+  const shY = top + .19 * hh;
+  c.beginPath();
+  if (st.pose === 'jump') { c.moveTo(x - wv * hh * .8, shY); c.lineTo(x - .22 * hh, top - .02 * hh); c.moveTo(x + wv * hh * .8, shY); c.lineTo(x + .22 * hh, top - .02 * hh); }
+  else if (st.pose === 'phone') { c.moveTo(x - wv * hh * .9, shY); c.lineTo(x - .1 * hh, shY + .2 * hh); c.lineTo(x - .02 * hh, shY + .05 * hh); c.moveTo(x + wv * hh * .9, shY); c.lineTo(x + .14 * hh, shY + .3 * hh); }
+  else if (side) { c.moveTo(x, shY); c.lineTo(x - swing * d * .8, shY + .3 * hh); }
+  else { const a = st.pose === 'sway' ? Math.sin(t * 2.4) * .06 * hh : 0; c.moveTo(x - wv * hh * .9, shY); c.lineTo(x - (wv + .05) * hh + a, shY + .3 * hh); c.moveTo(x + wv * hh * .9, shY); c.lineTo(x + (wv + .05) * hh + a, shY + .3 * hh); }
+  c.stroke();
+  // 胴体
+  c.fillStyle = S.top;
+  const rr = .05 * hh;
+  c.beginPath();
+  if (c.roundRect) c.roundRect(x - wv * hh, top + .15 * hh, wv * 2 * hh, .37 * hh, rr); else c.rect(x - wv * hh, top + .15 * hh, wv * 2 * hh, .37 * hh);
+  c.fill();
+  if (st.pose === 'phone') { c.fillStyle = '#222'; c.fillRect(x - .035 * hh, shY + .02 * hh, .03 * hh, .05 * hh); }
+  // 頭
+  const hy = top + .07 * hh, hr = .07 * hh;
+  c.fillStyle = S.skin; ell(c, x, hy, hr * .95, hr);
+  c.fillStyle = S.hair;
+  if (st.view === 'back') ell(c, x, hy - .05 * hr, hr, hr * .98);
+  else if (side) { ell(c, x - d * .25 * hr, hy - .45 * hr, hr * .85, hr * .6); }
+  else ell(c, x, hy - .55 * hr, hr * .95, hr * .5);
+  if (st.view === 'front') {
+    c.fillStyle = '#1a1412'; ell(c, x - .38 * hr, hy + .05 * hr, .11 * hr, .13 * hr); ell(c, x + .38 * hr, hy + .05 * hr, .11 * hr, .13 * hr);
+    c.strokeStyle = 'rgba(120,60,50,.7)'; c.lineWidth = Math.max(.8, .08 * hr); c.beginPath(); c.arc(x, hy + .35 * hr, .25 * hr, .2, Math.PI - .2); c.stroke();
+  } else if (side) {
+    c.fillStyle = '#1a1412'; ell(c, x + d * .5 * hr, hy + .02 * hr, .1 * hr, .12 * hr);
+    c.fillStyle = S.skin; ell(c, x + d * .95 * hr, hy + .2 * hr, .15 * hr, .12 * hr);
+  }
+}
+function drawLeaves(c, scene) {
+  c.fillStyle = '#2f4a2a';
+  for (const L of sim.leaves) { ell(c, L.x, L.y, L.rx, L.ry * .8, .4); }
+  c.fillStyle = '#4c6b3a';
+  for (const L of sim.leaves) { ell(c, L.x - L.rx * .25, L.y - L.ry * .2, L.rx * .55, L.ry * .4, .4); }
+  c.strokeStyle = '#3b2e22'; c.lineWidth = 14; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(-20, H * .1); c.quadraticCurveTo(W * .2, H * .45, W * .45, H * .6); c.moveTo(W * 1.02, H * .6); c.quadraticCurveTo(W * .9, H * .85, W * .8, H * 1.05); c.stroke();
+}
+function drawPerch(c, scene, p) {
+  const s = scene.f * PX_PER_MM / p.z;
+  const y = H / 2 - scene.f * (p.y - scene.camH) / p.z * PX_PER_MM;
+  c.strokeStyle = '#5a4532'; c.lineWidth = Math.max(2, .025 * s); c.lineCap = 'round';
+  c.beginPath(); c.moveTo(p.u0 * W, y + .01 * s); c.quadraticCurveTo((p.u0 + p.u1) / 2 * W, y - .015 * s, p.u1 * W, y + .02 * s); c.stroke();
+}
+
+function render() {
+  const scene = sim.scene, fno = FNOS[cfg.fnoIdx];
+  // 背景
+  const bb = blurPx(scene, fno, scene.bgZ, sim.lensD) / 2.2;
+  let li = 0; for (let i = 0; i < BG_LEVELS.length; i++) if (Math.abs(BG_LEVELS[i] - bb) < Math.abs(BG_LEVELS[li] - bb)) li = i;
+  ctx.drawImage(bgCache[li], 0, 0);
+  // 奥から順に
+  const items = [];
+  for (let i = 0; i < scene.ents.length; i++) items.push({ z: sim.states[i].Z, draw: c => scene.ents[i].kind === 'bird' ? drawBird(c, scene.ents[i], sim.states[i]) : drawPerson(c, scene.ents[i], sim.states[i]) });
+  if (scene.perches) for (const p of scene.perches) items.push({ z: p.z + .05, draw: c => drawPerch(c, scene, p) });
+  if (scene.leaves) items.push({ z: scene.leaves.z, draw: c => drawLeaves(c, scene) });
+  items.sort((a, b) => b.z - a.z);
+  for (const it of items) withBlur(ctx, blurPx(scene, fno, it.z, sim.lensD), it.draw);
+  drawOverlay();
+}
+
+function corners(x0, y0, x1, y1, len) {
+  ctx.beginPath();
+  ctx.moveTo(x0, y0 + len); ctx.lineTo(x0, y0); ctx.lineTo(x0 + len, y0);
+  ctx.moveTo(x1 - len, y0); ctx.lineTo(x1, y0); ctx.lineTo(x1, y0 + len);
+  ctx.moveTo(x1, y1 - len); ctx.lineTo(x1, y1); ctx.lineTo(x1 - len, y1);
+  ctx.moveTo(x0 + len, y1); ctx.lineTo(x0, y1); ctx.lineTo(x0, y1 - len);
+  ctx.stroke();
+}
+function clipBox(b) { return [clamp(b[0], 3, W - 3), clamp(b[1], 3, H - 3), clamp(b[2], 3, W - 3), clamp(b[3], 3, H - 3)]; }
+function drawOverlay() {
+  const raw = PRESETS[cfg.preset] && PRESETS[cfg.preset].raw;
+  ctx.save();
+  ctx.font = '600 13px "Barlow Semi Condensed", "Noto Sans JP", sans-serif';
+  ctx.textBaseline = 'bottom';
+  // AF点 / AFエリア
+  ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]);
+  if (raw) ctx.strokeRect(.15 * W, .12 * H, .7 * W, .76 * H);
+  else { const ax = cfg.af.u * W, ay = cfg.af.v * H; ctx.strokeRect(ax - 16, ay - 16, 32, 32); }
+  ctx.setLineDash([]);
+  const st = sim.status || {};
+  const okC = '#3fdc84', warnC = '#ffb340', badC = '#ff6a5c';
+  // 候補
+  if ($('showCands').checked && !raw) {
+    for (const c of sim.cands) {
+      if (c.id === sim.cur) continue;
+      const b = clipBox(c.st.box);
+      const pend = c.id === sim.pendId;
+      ctx.strokeStyle = pend ? warnC : 'rgba(255,255,255,.7)'; ctx.lineWidth = pend ? 2 : 1.2;
+      if (pend) ctx.setLineDash([5, 4]);
+      corners(b[0], b[1], b[2], b[3], Math.min(12, (b[2] - b[0]) / 3));
+      ctx.setLineDash([]);
+      label(`${c.id} ${Math.round(c.score * 100)}`, b[0], b[1] - 2, pend ? warnC : 'rgba(255,255,255,.9)');
+    }
+  }
+  // 選択中
+  const curS = sim.states.find(s2 => s2.id === sim.cur);
+  const color = st.match ? okC : warnC;
+  if (curS) {
+    const b = clipBox(curS.box);
+    ctx.strokeStyle = sim.lostN > 0 ? 'rgba(255,255,255,.5)' : color; ctx.lineWidth = 3;
+    corners(b[0], b[1], b[2], b[3], Math.min(18, (b[2] - b[0]) / 2.5));
+    const sc = sim.scoreMap[sim.cur];
+    label(`${sim.cur}${sc !== undefined && !raw ? ' ' + Math.round(sc * 100) : ''}${sim.lostN > 0 ? ' 見失い中' : ''}`, b[0], b[1] - 2, color, true);
+    if ($('showEye').checked && curS.eyeDet && curS.eye) { ctx.strokeStyle = color; ctx.lineWidth = 2; const r = Math.max(5, curS.eye.r * 2.6); ctx.strokeRect(curS.eye.x - r, curS.eye.y - r, r * 2, r * 2); }
+  } else if (sim.cur === 'LV') {
+    ctx.strokeStyle = badC; ctx.lineWidth = 3; corners(.06 * W, .1 * H, .42 * W, .82 * H, 18); label('手前の葉', .06 * W, .1 * H - 2, badC, true);
+  }
+  if ($('showEye').checked) for (const c of sim.cands) if (c.id !== sim.cur && c.st && c.st.eyeDet && c.st.eye) { ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 1; const r = Math.max(4, c.st.eye.r * 2.4); ctx.strokeRect(c.st.eye.x - r, c.st.eye.y - r, r * 2, r * 2); }
+  // 撮りたい被写体
+  if ($('showIdeal').checked) {
+    const is = sim.states.find(s2 => s2.id === st.idealId);
+    if (is && is.vis > 0) { const b = clipBox(is.box); ctx.fillStyle = '#ffe066'; ctx.font = '700 18px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('★', clamp((b[0] + b[2]) / 2, 10, W - 10), clamp(b[1] - 18, 20, H)); ctx.textAlign = 'left'; }
+  }
+  // 下部の情報
+  ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(0, H - 26, W, 26);
+  ctx.font = '500 13px "JetBrains Mono", monospace'; ctx.fillStyle = '#e8efe9'; ctx.textBaseline = 'middle';
+  const scene = sim.scene;
+  ctx.fillText(`${sim.t.toFixed(2)} s   ${scene.f}mm f/${FNOS[cfg.fnoIdx]}   ピント ${(1 / sim.lensD).toFixed(1)} m`, 10, H - 13);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = st.match && st.inFocus ? okC : st.match ? warnC : badC;
+  ctx.fillText(sim.cur ? `選択 ${sim.cur === 'LV' ? '手前の葉' : sim.cur}   撮りたい ${st.idealId}` : '—', W - 10, H - 13);
+  ctx.textAlign = 'left';
+  ctx.restore();
+}
+function label(txt, x, y, col, bold) {
+  ctx.font = `${bold ? 700 : 600} 13px "Barlow Semi Condensed", "Noto Sans JP", sans-serif`;
+  const w = ctx.measureText(txt).width + 8;
+  x = clamp(x, 2, W - w - 2); y = clamp(y, 18, H - 28);
+  ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(x, y - 16, w, 16);
+  ctx.fillStyle = col; ctx.textBaseline = 'bottom'; ctx.fillText(txt, x + 4, y - 1);
+}
+
+// ——— スコア表
+function renderScores() {
+  const raw = PRESETS[cfg.preset] && PRESETS[cfg.preset].raw;
+  const w = raw ? { N: 1 } : weightsOf(cfg);
+  const thead = $('scoreTbl').tHead, tb = $('scoreTbl').tBodies[0];
+  if (!thead.dataset.k || thead.dataset.k !== cfg.preset + JSON.stringify(w)) {
+    thead.dataset.k = cfg.preset + JSON.stringify(w);
+    thead.innerHTML = '<tr><th style="text-align:left">被写体</th>' + FEATS.map(([k, n]) => `<th class="${(w[k] || 0) ? '' : 'off'}" title="重み ${(w[k] || 0).toFixed(2)}">${n}<br><small style="font-family:var(--font-mono);font-weight:400">×${(w[k] || 0).toFixed(2)}</small></th>`).join('') + '<th style="text-align:left">合計</th></tr>';
+  }
+  const st = sim.status || {};
+  const rows = [];
+  const ids = sim.scene.ents.map(e => e.id).concat(sim.scene.leaves && raw ? [sim.scene.leaves.id] : []);
+  const shown = new Set();
+  for (const c of sim.cands) { shown.add(c.id); rows.push(rowHtml(c, w, st, raw)); }
+  for (const id of ids) if (!shown.has(id)) {
+    const s2 = sim.states.find(x => x.id === id);
+    const why = !s2 ? '' : s2.vis < .2 ? '隠れている・画面外' : '検出されず';
+    rows.push(`<tr class="miss"><td class="name"><i style="background:${entColor(id)}"></i>${id}${tags(id, st)}</td><td colspan="${FEATS.length + 1}" style="text-align:left">${why}</td></tr>`);
+  }
+  tb.innerHTML = rows.join('');
+  const s = sens(cfg);
+  $('scoreState').textContent = sim.lostN > 0 ? `${sim.cur} 見失い ${sim.lostN}/${s.hold} コマ` : sim.pendId ? `${sim.pendId} へ乗り移り待ち ${sim.pendN}/${raw ? 3 : s.confirm} コマ` : sim.cur ? `${sim.cur === 'LV' ? '手前の葉' : sim.cur} を追跡中` : '—';
+}
+function tags(id, st) {
+  let t = '';
+  if (id === sim.cur) t += '<span class="tag sel">選択</span>';
+  if (id === sim.pendId) t += '<span class="tag pend">待ち</span>';
+  if (id === st.idealId) t += '<span class="tag ideal">★</span>';
+  return t;
+}
+function rowHtml(c, w, st, raw) {
+  const nm = c.id === 'LV' ? '手前の葉' : c.id;
+  let h = `<tr class="${c.id === sim.cur ? 'sel' : ''}"><td class="name"><i style="background:${entColor(c.id)}"></i>${nm}${tags(c.id, st)}</td>`;
+  for (const [k] of FEATS) {
+    const v = c.f[k], on = (w[k] || 0) > 0;
+    h += raw && k !== 'N' ? `<td class="off">—</td>` : `<td class="f ${on ? '' : 'off'}" style="--v:${v.toFixed(2)}">${Math.round(v * 100)}</td>`;
+  }
+  h += `<td class="tot">${Math.round(c.score * 100)}<div class="bar" style="width:${Math.round(c.score * 100)}%;background:${entColor(c.id)}"></div></td></tr>`;
+  return h;
+}
+
+// ——— 推移グラフ
+const tl = $('tl'), tctx = tl.getContext('2d');
+function sizeChart() {
+  const dpr = window.devicePixelRatio || 1;
+  const w = tl.clientWidth;
+  tl.width = Math.round(w * dpr); tl.height = Math.round(250 * dpr);
+  tl.style.height = '250px';
+  tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+function renderChart() {
+  const w = tl.clientWidth, h = 250;
+  const L = 74, R = 10, T = 8;
+  const plotH = 150, stripH = 16, gap = 6;
+  tctx.clearRect(0, 0, w, h);
+  const ink = css('--ink'), muted = css('--muted'), line = css('--line'), acc = css('--accent'), warn = css('--warn'), bad = css('--bad'), sunk = css('--sunk');
+  const X = f => L + (w - L - R) * f / (DUR * FPS);
+  const Y = v => T + plotH * (1 - v);
+  tctx.font = '12px "Noto Sans JP", sans-serif'; tctx.fillStyle = muted; tctx.textBaseline = 'middle';
+  tctx.strokeStyle = line; tctx.lineWidth = 1;
+  for (const v of [0, .25, .5, .75, 1]) { tctx.beginPath(); tctx.moveTo(L, Y(v)); tctx.lineTo(w - R, Y(v)); tctx.stroke(); tctx.textAlign = 'right'; tctx.fillText(String(Math.round(v * 100)), L - 6, Y(v)); }
+  tctx.save(); tctx.translate(12, T + plotH / 2); tctx.rotate(-Math.PI / 2); tctx.textAlign = 'center'; tctx.fillText('合計スコア', 0, 0); tctx.restore();
+  const hs = sim.hist;
+  for (const id in hs.scores) {
+    const arr = hs.scores[id];
+    tctx.strokeStyle = entColor(id); tctx.lineWidth = 1.6; tctx.beginPath();
+    let pen = false;
+    for (let i = 0; i < arr.length; i++) {
+      const v = arr[i];
+      if (isNaN(v)) { pen = false; continue; }
+      if (!pen) { tctx.moveTo(X(i), Y(v)); pen = true; } else tctx.lineTo(X(i), Y(v));
+    }
+    tctx.stroke();
+  }
+  // 選択中の線を太く
+  tctx.lineWidth = 3.2; let prev = null;
+  for (let i = 0; i < hs.cur.length; i++) {
+    const id = hs.cur[i], v = id ? hs.scores[id] && hs.scores[id][i] : NaN;
+    if (id && !isNaN(v)) { if (prev && prev.id === id) { tctx.strokeStyle = entColor(id); tctx.beginPath(); tctx.moveTo(X(i - 1), Y(prev.v)); tctx.lineTo(X(i), Y(v)); tctx.stroke(); } prev = { id, v }; } else prev = null;
+  }
+  // 帯
+  const rows = [['撮りたい', i => hs.ideal[i] ? entColor(hs.ideal[i]) : null], ['選択', i => hs.cur[i] ? entColor(hs.cur[i]) : null], ['ピント', i => !hs.idealOk[i] ? sunk : hs.focus[i] ? acc : hs.match[i] ? warn : bad]];
+  rows.forEach(([nm, fn], r) => {
+    const y0 = T + plotH + 14 + r * (stripH + gap);
+    tctx.fillStyle = muted; tctx.textAlign = 'right'; tctx.fillText(nm, L - 6, y0 + stripH / 2);
+    tctx.fillStyle = sunk; tctx.fillRect(L, y0, w - L - R, stripH);
+    let s0 = 0, col = hs.cur.length ? fn(0) : null;
+    for (let i = 1; i <= hs.cur.length; i++) {
+      const c2 = i < hs.cur.length ? fn(i) : '__end';
+      if (c2 !== col) { if (col) { tctx.fillStyle = col; tctx.fillRect(X(s0), y0, X(i) - X(s0) + .5, stripH); } s0 = i; col = c2; }
+    }
+  });
+  // 時刻目盛り
+  tctx.fillStyle = muted; tctx.textAlign = 'center';
+  for (let s = 0; s <= DUR; s += 2) { const yy = T + plotH + 14 + 3 * (stripH + gap) + 6; tctx.fillText(`${s}s`, X(s * FPS), yy); }
+  if (!sim.done) { tctx.strokeStyle = ink; tctx.lineWidth = 1; tctx.beginPath(); tctx.moveTo(X(sim.frame), T); tctx.lineTo(X(sim.frame), T + plotH + 14 + 3 * (stripH + gap) - gap); tctx.stroke(); }
+}
+function renderLegend() {
+  const sc = sim.scene;
+  const ids = sc.ents.map(e => e.id);
+  let h = ids.map(id => `<span><i style="background:${entColor(id)}"></i>${id}</span>`).join('');
+  if (sc.leaves) h += `<span><i style="background:${entColor('LV')}"></i>手前の葉</span>`;
+  h += `<span><i style="background:var(--accent)"></i>撮りたい被写体に合焦</span><span><i style="background:var(--warn)"></i>選べたがピントが追いついていない</span><span><i style="background:var(--bad)"></i>別の被写体</span>`;
+  $('tlLegend').innerHTML = h;
+}
+
+function renderStats() {
+  const m = metrics(sim);
+  const pct = v => isNaN(v) ? '—' : `${Math.round(v * 100)}%`;
+  $('sMatch').textContent = pct(m.match);
+  $('sFocus').textContent = pct(m.focus);
+  $('sSwitch').textContent = String(m.switches);
+  $('sLag').textContent = isNaN(m.lag) ? (m.miss ? '追いつけず' : '—') : `${m.lag.toFixed(2)} 秒${m.miss ? `（${m.miss} 回追いつけず）` : ''}`;
+  const st = sim.status || {};
+  const chip = $('statusChip');
+  if (sim.done) { chip.className = 'chip'; chip.textContent = '終了'; }
+  else if (!st.idealOk) { chip.className = 'chip'; chip.textContent = '撮りたい被写体が見えていない'; }
+  else if (st.match && st.inFocus) { chip.className = 'chip ok'; chip.textContent = '撮りたい被写体に合焦'; }
+  else if (st.match) { chip.className = 'chip warn'; chip.textContent = '選べたがピント移動中'; }
+  else { chip.className = 'chip bad'; chip.textContent = '別の被写体を選んでいる'; }
+}
+function renderLog() {
+  const ol = $('log');
+  if (logShown > sim.log.length) { ol.innerHTML = ''; logShown = 0; }
+  for (; logShown < sim.log.length; logShown++) {
+    const e = sim.log[logShown];
+    const li = document.createElement('li'); li.className = 'k-' + e.kind;
+    li.innerHTML = `<b>${e.t.toFixed(2)}</b><span></span>`; li.querySelector('span').textContent = e.msg.replace(/LV/g, '手前の葉');
+    ol.appendChild(li);
+  }
+  ol.scrollTop = ol.scrollHeight;
+}
+
+let lastScoreF = -99, lastChartF = -99;
+function renderAll(full) {
+  render();
+  if (full || sim.frame - lastScoreF >= 6 || sim.frame < lastScoreF || sim.done) { renderScores(); lastScoreF = sim.frame; }
+  if (full || sim.frame - lastChartF >= 3 || sim.frame < lastChartF || sim.done) { renderChart(); renderStats(); lastChartF = sim.frame; }
+  renderLog();
+}
+
+// ——— 操作
+function restart() {
+  sim = makeSim(sceneIdx, cfg, 777 + sceneIdx);
+  logShown = 0; $('log').innerHTML = '';
+  stepSim(sim);
+  renderLegend();
+  renderAll(true);
+}
+function loadScene(i) {
+  sceneIdx = i;
+  const sc = SCENES[i];
+  cfg.fnoIdx = sc.fno; $('fno').value = sc.fno;
+  cfg.af = { u: .5, v: .5 };
+  $('sceneDesc').textContent = sc.desc;
+  buildBg(sc);
+  updateFno();
+  restart();
+  playing = true; $('play').textContent = '一時停止';
+}
+function updateFno() {
+  const sc = SCENES[sceneIdx], f = FNOS[cfg.fnoIdx];
+  $('fnoOut').textContent = `f/${f}`;
+  const tol = tolOf(sc, f);
+  $('fnoHint').textContent = `${sc.f}mm。許容範囲 ±${(tol * 1000).toFixed(2)} ミリディオプター（${sc.startZ} m で約 ±${(sc.startZ * sc.startZ * tol * 100).toFixed(0)} cm）。絞るとボケが減り、遠くの被写体の瞳も見つかりやすくなります。`;
+}
+function updateSens() {
+  const s = sens(cfg);
+  $('sensOut').textContent = String(cfg.sens);
+  $('sensHint').textContent = `マージン ${s.margin.toFixed(2)}・確認 ${s.confirm} コマ・見失い待ち ${s.hold} コマ`;
+}
+function setPreset(k) {
+  cfg.preset = k;
+  if (k !== 'custom') cfg.custom = { ...PRESETS[k].w };
+  for (const [fk] of FEATS) { $('w_' + fk).value = cfg.custom[fk]; $('wo_' + fk).textContent = cfg.custom[fk].toFixed(2); }
+  $('presetDesc').textContent = PRESETS[k].desc;
+  document.getElementById('p_' + k).checked = true;
+  markCmp();
+}
+
+function buildUI() {
+  $('sceneSeg').innerHTML = SCENES.map((s, i) => `<input type="radio" name="scene" id="s_${s.key}" value="${i}" ${i === 0 ? 'checked' : ''}><label for="s_${s.key}">${s.name}</label>`).join('');
+  $('presetSeg').innerHTML = PRESET_ORDER.concat('custom').map(k => `<input type="radio" name="preset" id="p_${k}" value="${k}"><label for="p_${k}">${PRESETS[k].name}</label>`).join('');
+  $('weights').innerHTML = FEATS.map(([k, n]) => `<div class="ctrl"><div class="row"><label for="w_${k}">${n}</label><output id="wo_${k}"></output></div><input type="range" id="w_${k}" min="0" max="2" step="0.05" value="0"></div>`).join('');
+  $('sceneSeg').addEventListener('change', e => loadScene(+e.target.value));
+  $('presetSeg').addEventListener('change', e => { setPreset(e.target.value); restart(); });
+  for (const [k] of FEATS) $('w_' + k).addEventListener('input', e => {
+    cfg.custom[k] = +e.target.value; $('wo_' + k).textContent = cfg.custom[k].toFixed(2);
+    if (cfg.preset !== 'custom') { cfg.preset = 'custom'; $('p_custom').checked = true; $('presetDesc').textContent = PRESETS.custom.desc; markCmp(); }
+    restart();
+  });
+  $('sens').addEventListener('input', e => { cfg.sens = +e.target.value; updateSens(); restart(); });
+  $('fno').addEventListener('input', e => { cfg.fnoIdx = +e.target.value; updateFno(); restart(); });
+  $('play').addEventListener('click', () => {
+    if (sim.done) { restart(); playing = true; }
+    else playing = !playing;
+    $('play').textContent = playing ? '一時停止' : '再生';
+  });
+  $('restart').addEventListener('click', () => { restart(); });
+  $('stepbtn').addEventListener('click', () => { playing = false; $('play').textContent = '再生'; if (!sim.done) { stepSim(sim); renderAll(true); } });
+  document.querySelectorAll('input[name=rate]').forEach(r => r.addEventListener('change', e => { rate = +e.target.value; }));
+  for (const id of ['showCands', 'showIdeal', 'showEye']) $(id).addEventListener('change', () => render());
+  vf.addEventListener('click', e => {
+    const r = vf.getBoundingClientRect();
+    cfg.af = { u: clamp((e.clientX - r.left) / r.width, .03, .97), v: clamp((e.clientY - r.top) / r.height, .05, .9) };
+    restart();
+  });
+  $('cmpBtn').addEventListener('click', runCompare);
+  window.addEventListener('resize', () => { sizeChart(); renderChart(); });
+  const mq = window.matchMedia('(prefers-color-scheme: dark)');
+  if (mq.addEventListener) mq.addEventListener('change', () => { renderLegend(); renderAll(true); });
+}
+
+let cmpData = null;
+function runCompare() {
+  const btn = $('cmpBtn'); btn.disabled = true; btn.textContent = '計算中…';
+  setTimeout(() => {
+    const keys = PRESET_ORDER.concat('custom');
+    cmpData = SCENES.map((s, i) => keys.map(k => runAll(i, { ...cfg, preset: k, custom: { ...cfg.custom }, af: { u: .5, v: .5 } })));
+    renderCmp(keys);
+    btn.disabled = false; btn.textContent = '再計算';
+  }, 30);
+}
+function renderCmp(keys) {
+  const tbl = $('cmpTbl');
+  tbl.tHead.innerHTML = '<tr><th style="text-align:left">場面</th>' + keys.map(k => `<th>${PRESETS[k].name}</th>`).join('') + '</tr>';
+  tbl.tBodies[0].innerHTML = cmpData.map((row, i) => {
+    const best = Math.max(...row.map(m => m.match));
+    return `<tr><td class="sc">${SCENES[i].name}</td>` + row.map((m, j) => `<td class="cell ${m.match >= best - 1e-9 ? 'best' : ''}" data-s="${i}" data-p="${keys[j]}"><b>${Math.round(m.match * 100)}%</b><small>合焦 ${Math.round(m.focus * 100)}%</small></td>`).join('') + '</tr>';
+  }).join('');
+  markCmp();
+}
+function markCmp() {
+  document.querySelectorAll('#cmpTbl td.cell').forEach(td => td.classList.toggle('cur', +td.dataset.s === sceneIdx && td.dataset.p === cfg.preset));
+}
+
+function loop(ts) {
+  if (lastTs === null) lastTs = ts;
+  const dt = Math.min(.1, (ts - lastTs) / 1000); lastTs = ts;
+  if (playing && !sim.done) {
+    acc += dt * rate;
+    let n = 0;
+    while (acc >= DT && n < 8 && !sim.done) { stepSim(sim); acc -= DT; n++; }
+    if (n) renderAll(false);
+    if (sim.done) { renderAll(true); $('play').textContent = 'もう一度'; }
+  } else acc = 0;
+  requestAnimationFrame(loop);
+}
+
+buildUI();
+sizeChart();
+updateSens();
+setPreset('smart');
+loadScene(0);
+if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { playing = false; $('play').textContent = '再生'; }
+runCompare();
+requestAnimationFrame(loop);
+window.__sel = { SCENES, PRESETS, runAll, cfg, get sim() { return sim; } };
+</script>
+
+</body></html>
