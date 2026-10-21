@@ -1,0 +1,1400 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>観客AF対策ラボ</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;600&family=Noto+Sans+JP:wght@400;500;700&display=swap">
+<style>
+/* レイアウト：左がファインダー・距離グラフ・スコア、右が「観客対策」を先頭にした設定パネル。下に比較実験と解説 */
+:root {
+  --bg: #eef2f0;
+  --panel: #ffffff;
+  --sunk: #e3e9e6;
+  --ink: #18211e;
+  --muted: #5a6863;
+  --line: #d2dbd7;
+  --accent: #17834a;
+  --accent-soft: rgba(23,131,74,.14);
+  --warn: #b86400;
+  --bad: #c3302a;
+  --bad-soft: rgba(195,48,42,.12);
+  --subj: #2a66d6;
+  --focus: #d07a06;
+  --crowd: rgba(195,48,42,.13);
+  --c1: #3b6fd8; --c2: #d9822b; --c3: #8a5cc7; --c4: #1f9aa0; --c5: #d0507a; --c6: #7d8a2a; --c7: #8a8f8d;
+  --font-display: "Barlow Semi Condensed", "Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif;
+  --font-body: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", "Meiryo", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101514; --panel: #18201e; --sunk: #222b29; --ink: #e2eae6; --muted: #91a09a; --line: #2c3734;
+    --accent: #3fcd7c; --accent-soft: rgba(63,205,124,.16); --warn: #f0a23a; --bad: #ff6a5c; --bad-soft: rgba(255,106,92,.14);
+    --subj: #74a2ff; --focus: #f3a53c; --crowd: rgba(255,106,92,.14);
+    --c1: #7aa2ff; --c2: #f2a35a; --c3: #b994ee; --c4: #4fc6cc; --c5: #f07fa3; --c6: #b4c24e; --c7: #a3aaa7;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101514; --panel: #18201e; --sunk: #222b29; --ink: #e2eae6; --muted: #91a09a; --line: #2c3734;
+  --accent: #3fcd7c; --accent-soft: rgba(63,205,124,.16); --warn: #f0a23a; --bad: #ff6a5c; --bad-soft: rgba(255,106,92,.14);
+  --subj: #74a2ff; --focus: #f3a53c; --crowd: rgba(255,106,92,.14);
+  --c1: #7aa2ff; --c2: #f2a35a; --c3: #b994ee; --c4: #4fc6cc; --c5: #f07fa3; --c6: #b4c24e; --c7: #a3aaa7;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 14px; line-height: 1.65;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 40px;
+}
+.wrap { max-width: 1260px; margin: 0 auto; display: grid; gap: 18px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 20px; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(25px, 6vw, 30px); letter-spacing: .01em; margin: 0; text-wrap: balance; }
+h1 small { font-family: var(--font-mono); font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 10px; letter-spacing: .08em; }
+@media (max-width: 520px) { h1 small { display: block; margin-left: 0; } }
+header p { margin: 0; color: var(--muted); max-width: 64ch; }
+h2 { font-family: var(--font-display); font-weight: 600; font-size: 19px; margin: 0; letter-spacing: .02em; text-wrap: balance; }
+h3 { font-family: var(--font-display); font-weight: 600; font-size: 16.5px; margin: 10px 0 0; letter-spacing: .02em; }
+.label { font-family: var(--font-display); font-weight: 600; font-size: 12.5px; letter-spacing: .1em; color: var(--muted); }
+
+.main { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 920px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.col { display: grid; gap: 14px; min-width: 0; }
+
+.vf { position: relative; background: #0b0d0c; border-radius: 10px; overflow: hidden; }
+.vf canvas { display: block; width: 100%; height: auto; }
+.transport { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+button, .seg label {
+  font-family: var(--font-display); font-weight: 600; font-size: 14px; letter-spacing: .03em;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 7px;
+  padding: 6px 12px; cursor: pointer; line-height: 1.3;
+}
+button:hover, .seg label:hover { border-color: var(--muted); }
+button:disabled { opacity: .6; cursor: progress; }
+button:focus-visible, .seg input:focus-visible + label, input[type=range]:focus-visible, input[type=checkbox]:focus-visible, .switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; min-width: 88px; }
+:root[data-theme="dark"] button.primary { color: #0c1410; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) button.primary { color: #0c1410; } }
+.transport .spacer { flex: 1; }
+.chip { font-family: var(--font-display); font-weight: 600; font-size: 13px; padding: 3px 10px; border-radius: 99px; background: var(--sunk); color: var(--muted); letter-spacing: .04em; white-space: nowrap; }
+.chip.ok { background: var(--accent-soft); color: var(--accent); }
+.chip.warn { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.chip.bad { background: var(--bad-soft); color: var(--bad); }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 10px; min-width: 0; }
+.card.guard { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.cardhead { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.chart canvas, .mapc canvas { display: block; width: 100%; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--muted); }
+.legend i { display: inline-block; width: 14px; height: 10px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+.legend i.ln { height: 3px; }
+
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 520px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.stat { display: grid; gap: 2px; }
+.stat b { font-family: var(--font-mono); font-weight: 600; font-size: 21px; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.stat b.bad { color: var(--bad); }
+.stat b.ok { color: var(--accent); }
+.stat span { font-size: 12px; color: var(--muted); }
+
+.ctrl { display: grid; gap: 2px; }
+.ctrl .row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.ctrl output { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.ctrl .hint { font-size: 12px; color: var(--muted); line-height: 1.45; }
+input[type=range] { width: 100%; accent-color: var(--accent); margin: 2px 0; }
+.ticks { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); margin-top: -2px; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label { font-size: 13.5px; padding: 5px 10px; }
+.seg input:checked + label { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.desc { font-size: 13px; color: var(--muted); margin: 0; }
+.checks { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); }
+.checks label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.checks input { accent-color: var(--accent); }
+.weights { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 16px; }
+@media (max-width: 400px) { .weights { grid-template-columns: minmax(0, 1fr); } }
+.weights .ctrl label { font-size: 13px; }
+details > summary { cursor: pointer; font-family: var(--font-display); font-weight: 600; font-size: 12.5px; letter-spacing: .1em; color: var(--muted); }
+details[open] > summary { margin-bottom: 8px; }
+
+.guardlist { display: grid; gap: 12px; }
+.gitem { display: grid; gap: 4px; }
+.switch { display: flex; align-items: center; gap: 10px; cursor: pointer; font-weight: 700; }
+.switch input { position: absolute; opacity: 0; }
+.switch span.t { width: 38px; height: 22px; border-radius: 99px; background: var(--sunk); border: 1px solid var(--line); position: relative; flex: none; transition: background .15s; }
+.switch span.t::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--muted); transition: transform .15s, background .15s; }
+.switch input:checked + span.t { background: var(--accent-soft); border-color: var(--accent); }
+.switch input:checked + span.t::after { transform: translateX(16px); background: var(--accent); }
+.gitem p { margin: 0 0 0 48px; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+.gitem .ctrl { margin-left: 48px; }
+.guardbtns { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.log { font-family: var(--font-mono); font-size: 12px; max-height: 190px; overflow-y: auto; display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.log li { display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 8px; color: var(--muted); }
+.log li b { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.log li.k-bad span { color: var(--bad); }
+.log li.k-warn span { color: var(--warn); }
+.log li.k-ok span { color: var(--accent); }
+.log span { font-family: var(--font-body); }
+
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 6px; text-align: center; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+th { font-family: var(--font-display); font-weight: 600; color: var(--muted); letter-spacing: .03em; white-space: nowrap; }
+#scoreTbl { min-width: 640px; }
+#scoreTbl td { font-family: var(--font-mono); font-size: 12px; }
+#scoreTbl td.f { background: color-mix(in srgb, var(--accent) calc(var(--v) * 30%), transparent); }
+#scoreTbl th.off, #scoreTbl td.off { opacity: .35; }
+#scoreTbl td.name { text-align: left; font-family: var(--font-display); font-weight: 600; font-size: 13.5px; white-space: nowrap; }
+#scoreTbl td.name i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+#scoreTbl td.tot { text-align: left; min-width: 70px; }
+#scoreTbl td.tot .bar { height: 6px; border-radius: 3px; margin-top: 2px; }
+#scoreTbl td.judge { text-align: left; font-family: var(--font-body); font-size: 12px; white-space: nowrap; }
+#scoreTbl tr.sel td { background-color: var(--accent-soft); }
+#scoreTbl tr.sel.fan td { background-color: var(--bad-soft); }
+#scoreTbl tr.ex td:not(.judge):not(.name) { opacity: .4; text-decoration: line-through; }
+#scoreTbl tr.miss td { color: var(--muted); }
+#scoreTbl tr.sum td { text-align: left; font-family: var(--font-body); color: var(--muted); }
+.tag { font-family: var(--font-display); font-size: 11.5px; font-weight: 600; padding: 0 6px; border-radius: 99px; margin-left: 6px; letter-spacing: .03em; }
+.tag.sel { background: var(--accent); color: var(--panel); }
+.tag.pend { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+.tag.ideal { background: var(--sunk); color: var(--ink); }
+.ex-gate { color: var(--accent); }
+.ex-crowd { color: var(--accent); }
+.fanword { color: var(--bad); }
+#cmpTbl { min-width: 680px; }
+#cmpTbl td.cell { font-family: var(--font-mono); }
+#cmpTbl td.cell b { font-weight: 600; }
+#cmpTbl td.cell b.bad { color: var(--bad); }
+#cmpTbl td.cell b.ok { color: var(--accent); }
+#cmpTbl td.cell small { display: block; font-size: 11px; color: var(--muted); }
+#cmpTbl td.cur { outline: 2px solid var(--accent); outline-offset: -2px; }
+#cmpTbl td.sc { text-align: left; font-family: var(--font-display); font-weight: 600; font-size: 13px; white-space: nowrap; }
+.note { font-size: 12.5px; color: var(--muted); margin: 0; }
+.progress { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+
+.lower { display: grid; gap: 18px; }
+.algo p, .algo li { max-width: 78ch; }
+.algo ul, .algo ol { margin: 0; padding-left: 1.3em; display: grid; gap: 4px; }
+.algo p { margin: 0; }
+.formula { font-family: var(--font-mono); font-size: 12.5px; background: var(--sunk); border-radius: 8px; padding: 10px 12px; white-space: pre-wrap; overflow-x: auto; line-height: 1.6; }
+.flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; }
+.flow .box { background: var(--sunk); border-radius: 6px; padding: 4px 10px; }
+.flow .box.g { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.flow .arr { color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .switch span.t, .switch span.t::after { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>観客AF対策ラボ <small>CROWD GUARD · 60 Hz SIM</small></h1>
+    <p>体育館の観客席には、こちらを向いたくっきりした顔が百以上並んでいます。動き回る選手を追っているうちに、瞳・顔優先のせいでピントが観客に飛ぶ。その原因と、3 つの対策がそれぞれ何を防ぐのかを確かめる実験台です。</p>
+  </header>
+
+  <div class="main">
+    <div class="col">
+      <div class="vf"><canvas id="vf" width="800" height="450" aria-label="シミュレーションのファインダー画面"></canvas></div>
+      <div class="transport">
+        <button id="play" class="primary">一時停止</button>
+        <button id="restart">最初から</button>
+        <button id="stepbtn">1コマ送り</button>
+        <div class="seg" role="radiogroup" aria-label="再生速度">
+          <input type="radio" name="rate" id="r025" value="0.25"><label for="r025">0.25×</label>
+          <input type="radio" name="rate" id="r05" value="0.5"><label for="r05">0.5×</label>
+          <input type="radio" name="rate" id="r1" value="1" checked><label for="r1">1×</label>
+        </div>
+        <span class="spacer"></span>
+        <span id="statusChip" class="chip ok">P1 に合焦</span>
+      </div>
+      <div class="checks">
+        <label><input type="checkbox" id="showCands" checked>選手の枠とスコア</label>
+        <label><input type="checkbox" id="showFans" checked>観客の検出結果</label>
+        <label><input type="checkbox" id="showEye" checked>瞳の検出</label>
+      </div>
+
+      <div class="card chart">
+        <div class="cardhead"><h2>ピント位置の推移</h2><span class="label">対数目盛 · m · 0〜14 秒</span></div>
+        <canvas id="tl" height="270" aria-label="主役 P1 の距離とレンズのピント位置、観客席の距離帯"></canvas>
+        <div class="legend">
+          <span><i class="ln" style="background:var(--subj)"></i>主役 P1 の距離</span>
+          <span><i class="ln" style="background:var(--focus)"></i>レンズのピント位置</span>
+          <span><i style="background:var(--crowd)"></i>観客席の距離</span>
+          <span><i class="ln" style="background:var(--accent)"></i>距離ゲート（オンのとき）</span>
+        </div>
+        <div class="legend" id="stripLegend">
+          <span><i style="background:var(--accent)"></i>P1 に合焦</span>
+          <span><i style="background:var(--warn)"></i>別の選手</span>
+          <span><i style="background:var(--bad)"></i>観客</span>
+          <span><i style="background:var(--sunk)"></i>見失って保持中</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="stats">
+          <div class="stat"><b id="sFan">—</b><span>観客を主被写体に選んでいた時間</span></div>
+          <div class="stat"><b id="sLens">—</b><span>ピントが観客席の距離にあった時間</span></div>
+          <div class="stat"><b id="sMatch">—</b><span>主役 P1 を選べた割合（P1 が見えている間）</span></div>
+          <div class="stat"><b id="sFocus">—</b><span>主役 P1 に合焦していた割合</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="cardhead"><h2>スコアの内訳</h2><span class="label" id="scoreState">—</span></div>
+        <div class="tablewrap"><table id="scoreTbl"><thead></thead><tbody></tbody></table></div>
+        <p class="note">選手 6 人と、スコアの高い観客 3 人を表示。取り消し線は対策によって候補から外されたもの。「観客らしさ」は静止度と密集度から計算します。</p>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card guard">
+        <div class="cardhead"><span class="label">観客対策</span><span class="note" id="guardSummary"></span></div>
+        <div class="guardlist">
+          <div class="gitem">
+            <label class="switch"><input type="checkbox" id="gGate" checked><span class="t"></span>① 距離ゲート（AF 範囲の制限）</label>
+            <p>コートの奥の端より遠いものは候補にしない。レンズもその距離より奥へは動かさない。</p>
+            <div class="ctrl">
+              <div class="row"><label for="gateM">ゲートの距離</label><output id="gateOut"></output></div>
+              <input type="range" id="gateM" min="14" max="30" step="0.5" value="19">
+              <div class="hint">選手が動くのは 8〜17.5 m、広告ボードが 20 m、観客席は 21.5 m より奥。</div>
+            </div>
+          </div>
+          <div class="gitem">
+            <label class="switch"><input type="checkbox" id="gCrowd" checked><span class="t"></span>② 観客の判定（静止 × 密集）</label>
+            <p>1.5 秒間ほとんど位置が変わらず、同じ距離・同じ大きさの人が周りに何人もいる人物を「観客」とみなして候補から外す。</p>
+          </div>
+          <div class="gitem">
+            <label class="switch"><input type="checkbox" id="gLocal" checked><span class="t"></span>③ 見失ったら周辺だけ探す</label>
+            <p>追っていた選手が隠れたら、予測位置の近く・近い距離の候補だけを探す。2 秒見つからなければ全体から選び直す。</p>
+          </div>
+        </div>
+        <div class="guardbtns">
+          <button id="allOn">すべてオン</button>
+          <button id="allOff">すべてオフ（問題を再現）</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <span class="label">主被写体の選び方</span>
+        <div class="seg" id="presetSeg" role="radiogroup" aria-label="選び方"></div>
+        <p class="desc" id="presetDesc"></p>
+        <details>
+          <summary>手がかりの重み（動かすと「カスタム」になります）</summary>
+          <div class="weights" id="weights"></div>
+        </details>
+      </div>
+
+      <div class="card">
+        <span class="label">乗り移りとレンズ</span>
+        <div class="ctrl">
+          <div class="row"><label for="sens">乗り移り感度</label><output id="sensOut"></output></div>
+          <input type="range" id="sens" min="1" max="5" step="1" value="3">
+          <div class="ticks"><span>粘る</span><span>敏感</span></div>
+          <div class="hint" id="sensHint"></div>
+        </div>
+        <div class="ctrl">
+          <div class="row"><label for="fno">絞り（F値）</label><output id="fnoOut"></output></div>
+          <input type="range" id="fno" min="0" max="7" step="1" value="3">
+          <div class="hint" id="fnoHint"></div>
+        </div>
+      </div>
+
+      <div class="card mapc">
+        <div class="cardhead"><span class="label">上から見た配置</span><span class="note">下がカメラ</span></div>
+        <canvas id="map" height="260" aria-label="コートと観客席を上から見た図"></canvas>
+        <div class="legend">
+          <span><i style="background:var(--c1)"></i>選手（色は ID）</span>
+          <span><i style="background:var(--c7)"></i>観客</span>
+          <span><i class="ln" style="background:var(--focus)"></i>ピント面</span>
+          <span><i class="ln" style="background:var(--accent)"></i>距離ゲート</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <span class="label">出来事</span>
+        <ol class="log" id="log"></ol>
+      </div>
+    </div>
+  </div>
+
+  <div class="lower">
+    <div class="card">
+      <div class="cardhead">
+        <h2>比較実験：どの方式でも観客に飛ばないか</h2>
+        <button id="cmpBtn">計算する</button>
+      </div>
+      <p class="note">いまの乗り移り感度・絞り・ゲート距離で、6 つの方式を「対策なし」「対策を 1 つだけ」「すべて」で 14 秒走らせます。大きい数字は観客を主被写体に選んでいた時間（赤 = 観客に飛んだ、緑 = 0%）。小さい数字は主役 P1 に合焦していた割合。枠は今の組み合わせです。</p>
+      <div class="tablewrap"><table id="cmpTbl"><thead></thead><tbody></tbody></table></div>
+      <span class="progress" id="cmpProg"></span>
+    </div>
+
+    <div class="card algo" id="algo">
+      <h2>なぜ観客に飛ぶのか、どう防ぐのか</h2>
+
+      <h3>観客に飛ぶ 3 つのきっかけ</h3>
+      <ol>
+        <li><b>選手を見失ったとき</b>：追っていた選手が他の選手の陰に入ると、カメラは少し待ってから「いちばんスコアの高い候補」に乗り移ります。観客はこちらを向いていて瞳がくっきり見えるので、瞳・顔を重く見る方式ではここで観客が 1 位になります。</li>
+        <li><b>選手が背中を向けたとき</b>：瞳・顔の手がかりが 0 になり、待っている観客の顔のほうがスコアが高くなります。乗り移りの条件を満たすと、選手が見えていても乗り移ります。</li>
+        <li><b>AF 点の近くに観客がいるとき</b>：AF 点優先では、選手が AF 点から離れた瞬間に、背景でちょうど AF 点の位置にいる観客が「いちばん近い」被写体になります。</li>
+      </ol>
+      <p>もう一つの要因は、観客が意外にボケていないことです。85mm f/2.8 で 12 m の選手に合わせても、25 m の観客のボケは直径 2 画素ほどしかなく、AI は観客の瞳を問題なく見つけます。</p>
+
+      <h3>1 コマの処理と、対策が入る場所</h3>
+      <div class="flow" aria-label="処理の流れ">
+        <span class="box">① 検出（選手と観客の顔・瞳）</span><span class="arr">→</span>
+        <span class="box g">② 観客の判定</span><span class="arr">→</span>
+        <span class="box g">③ 距離ゲート</span><span class="arr">→</span>
+        <span class="box">④ 9 つの手がかりでスコア</span><span class="arr">→</span>
+        <span class="box g">⑤ 乗り移り判定（見失い時は周辺だけ）</span><span class="arr">→</span>
+        <span class="box g">⑥ 位相差AF・レンズ（ゲートより奥へは動かさない）</span>
+      </div>
+      <p>大事なのは、対策を「スコアの減点」ではなく「候補からの除外」にしていることです。減点だと、選手がもっと悪い条件になったときに観客が逆転し得ます。除外すれば、どの重み付け（どの方式）を選んでも観客は選ばれません。</p>
+
+      <h3>① 距離ゲート</h3>
+      <ul>
+        <li>候補ごとに位相差AFで測った距離を 10 コマほど平滑化し、ゲートより遠ければ候補から外します。1 コマの測定ノイズで観客がゲート内に入ってこないよう、平滑化した値で判定します。</li>
+        <li>レンズへの指令もゲートの距離で止めます（レンズのフォーカスリミッターと同じ考え方）。たとえ選び間違えても、ピントは観客席まで行きません。</li>
+        <li>弱点：コート脇の人（ベンチ、審判、カメラマン）は防げません。ゲートを手前にしすぎると、奥にいる選手も外れます。ゲートを 16 m にして試してみてください。</li>
+      </ul>
+      <div class="formula">除外する条件： 平滑化した距離 (1/m) &lt; 1 / ゲート距離
+レンズ指令    = max(推定ピント位置, 1 / ゲート距離)        （ディオプターで比較）</div>
+
+      <h3>② 観客の判定</h3>
+      <ul>
+        <li><b>静止度</b>：直近 1.5 秒で画面上の位置がどれだけ動いたか。体の高さの 30% 以上動いたら 0、まったく動かなければ 1。手を振っても体の位置は変わらないので、手を振る観客も「静止」と判定されます。</li>
+        <li><b>密集度</b>：距離の差が 0.006 ディオプター以内（25 m 付近で約 ±4 m）、横方向が体の高さの 3 倍以内、大きさが 0.6〜1.6 倍の人物を数えます。</li>
+        <li>静止度は 1.5 秒分の履歴がたまるまで 0.5 とします。密集していれば、最初のコマから観客と判定できます。</li>
+        <li>弱点：観客が立ち上がる、移動するなど体ごと動くと静止度が下がり、観客と判定されなくなることがあります（この場面では 6 秒に A 列の観客が立ち上がります）。逆に、ゴール下で何人も固まって止まっている選手を観客と誤判定する恐れもあります。</li>
+      </ul>
+      <div class="formula">観客らしさ = 0.5 × 静止度 + 0.5 × min(1, (近くにいる似た人の数 − 1) / 4)
+観客らしさが 0.6 を超えたら観客とみなす（0.5 を下回るまで解除しない）</div>
+
+      <h3>③ 見失ったら周辺だけ探す</h3>
+      <ul>
+        <li>追っていた選手が検出されなくなったら、最後の位置から速度で予測した位置の近く（体の高さの 1.2 倍 + 2 倍 × 見失ってからの秒数）、かつ推定距離から ±0.015 ディオプター以内の候補だけを探します。</li>
+        <li>見つかった候補が 3 コマ続けば乗り移ります。2 秒たっても見つからなければ、全体から選び直します。</li>
+        <li>弱点：「見失ったとき」の飛びは防げますが、選手が見えているのに背中を向けたときの乗り移り（きっかけ 2）は防げません。</li>
+      </ul>
+
+      <h3>どの対策を選ぶか</h3>
+      <p>比較実験の表を見ると、① はほぼ単独で観客への飛びを止めます。ただし観客席がコートのすぐ後ろにある場面や、サッカーのように奥行きが大きい場面では、ゲートの距離を決めにくくなります。② は距離に頼らないので場面を選びませんが、動いた観客を取りこぼすことがあります。③ は飛びの回数を減らすだけで、単独では足りません。性質の違う 3 つを重ねると、どれか 1 つが漏らしても残りが止めます。</p>
+
+      <h3>簡略化している点</h3>
+      <ul>
+        <li>検出・瞳・姿勢は台本の幾何から計算し、確率で取りこぼしを入れています。実機ではニューラルネットが画像から推定します。</li>
+        <li>カメラは固定で、流し撮りはしていません。流し撮りでは観客も画面上を動くので、② の静止度は画面座標ではなくジャイロで補正した角度で測る必要があります。</li>
+        <li>実際のカメラが観客をどう扱っているかは、どのメーカーも公開していません。ここで紹介した 3 つは、公開されている設定項目（AF エリアや距離範囲の制限、乗り移りの粘り）と一般的な考え方をもとにした自作の近似です。</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script id="core">
+// CORE-BEGIN  ———— シミュレーション本体（DOM に依存しない）
+const W = 800, H = 450, FPS = 60, DT = 1 / FPS, PX_PER_MM = H / 24, DUR = 14, LAT = 3;
+const FNOS = [1.4, 1.8, 2, 2.8, 4, 5.6, 8, 11];
+const SC = { f: 85, camH: 1.0, motor: 1.6, startZ: 12, boardZ: 20, boardH: .9, crowdZ0: 21.5 };
+const FEATS = [
+  ['S', '大きさ'], ['N', '近さ'], ['C', 'AF点'], ['E', '瞳'], ['F', '向き'],
+  ['V', '露出度'], ['A', '動き'], ['R', 'ピント移動'], ['K', '継続']
+];
+const SENS = { margin: [0.12, 0.08, 0.05, 0.03, 0.01], confirm: [30, 18, 10, 5, 1], hold: [45, 30, 18, 10, 4] };
+const PRESETS = {
+  raw:     { name: '至近優先（検出なし）', desc: '被写体検出を使わず、画面中央の広いエリアでいちばん手前にある物に合わせます。観客は選手より奥にいるので、この方式はもともと観客には飛びません（その代わり手前の選手に飛びます）。', raw: true,
+             w: { S: 0, N: 1, C: 0, E: 0, F: 0, V: 0, A: 0, R: 0, K: 0 } },
+  nearest: { name: '最も近い被写体', desc: '検出した人物のうち、いちばん手前の人を選びます。', w: { S: .3, N: 1, C: 0, E: 0, F: 0, V: .1, A: 0, R: 0, K: .2 } },
+  center:  { name: 'AF点優先', desc: 'AF 点にいちばん近い人物を選びます。選手が AF 点から離れると、背景でちょうど AF 点に重なる観客に飛びます。', w: { S: .15, N: 0, C: 1, E: 0, F: 0, V: .2, A: 0, R: 0, K: .2 } },
+  eye:     { name: '瞳・顔優先', desc: '瞳が見える人物、こちらを向いた人物を優先します。観客は全員こちらを向いているので、対策なしではいちばん飛びやすい方式です。', w: { S: .2, N: 0, C: .25, E: 1, F: .5, V: .2, A: 0, R: 0, K: .2 } },
+  action:  { name: '動き優先', desc: '姿勢から推定した動作の大きさを優先します。手を振る観客に反応することがあります。', w: { S: .1, N: 0, C: .2, E: .2, F: 0, V: .2, A: 1.4, R: 0, K: .2 } },
+  smart:   { name: '総合スコア', desc: '9 つの手がかりの重み付き合計です（前回のラボと同じ重み）。', w: { S: .45, N: .3, C: .4, E: .8, F: .4, V: .7, A: 2.2, R: .2, K: .3 } },
+  custom:  { name: 'カスタム', desc: '重みを自由に変えた設定です。', w: null }
+};
+const PRESET_ORDER = ['raw', 'nearest', 'center', 'eye', 'action', 'smart'];
+
+function rngFrom(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function gauss(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+function kf(keys, lin) {
+  return t => {
+    if (t <= keys[0][0]) return keys[0][1];
+    for (let i = 1; i < keys.length; i++) {
+      if (t <= keys[i][0]) {
+        const [t0, v0] = keys[i - 1], [t1, v1] = keys[i];
+        let a = (t - t0) / (t1 - t0);
+        if (!lin) a = a * a * (3 - 2 * a);
+        return v0 + (v1 - v0) * a;
+      }
+    }
+    return keys[keys.length - 1][1];
+  };
+}
+function steps(keys) { return t => { let v = keys[0][1]; for (const [k, s] of keys) if (t >= k) v = s; return v; }; }
+const K = v => () => v;
+const sOf = Z => SC.f * PX_PER_MM / Z;
+const proj = (h, Z) => H / 2 - SC.f * (h - SC.camH) / Z * PX_PER_MM;
+
+// 選手。u = 画面上の横位置、Z = 距離 m、Y = ジャンプの高さ
+const HOME = { top: '#2f5fb3', bottom: '#f2f4f6', num: '#ffffff' }, AWAY = { top: '#c8423a', bottom: '#2a2626', num: '#ffffff' };
+const PLAYERS = [
+  { id: 'P1', num: 7, team: HOME, skin: '#c99a73', hair: '#1c1714', Hm: 1.86,
+    u: kf([[0, .3], [3, .62], [4.4, .57], [5.8, .55], [8, .3], [10, .25], [12, .5], [14, .74]]),
+    Z: kf([[0, 12], [3, 12.5], [4.4, 15.8], [5.8, 16.2], [8, 10], [10, 9.6], [12, 11], [14, 12.5]]),
+    Y: K(0), pose: steps([[0, 'run'], [8.2, 'stand'], [9.8, 'run']]), act: steps([[0, .4], [8.2, .06], [9.8, .4]]), face: 25 },
+  { id: 'P2', num: 11, team: AWAY, skin: '#e2b893', hair: '#6b4a2e', Hm: 1.9,
+    u: kf([[0, .76], [2, .46], [4, .2], [7, .38], [10, .7], [14, .56]]), Z: kf([[0, 9], [2, 10.5], [4, 9], [7, 13], [10, 15], [14, 10]]),
+    Y: K(0), pose: K('run'), act: K(.4), face: 0 },
+  { id: 'P3', num: 23, team: AWAY, skin: '#8d5b3f', hair: '#141110', Hm: 2.0,
+    u: kf([[0, .54], [4.2, .57], [6, .57], [9, .85], [14, .66]]), Z: kf([[0, 14], [4.2, 13], [6, 13], [9, 11], [14, 15]]),
+    Y: K(0), pose: steps([[0, 'run'], [4.3, 'stand'], [6, 'run']]), act: steps([[0, .4], [4.3, .06], [6, .4]]), face: 10 },
+  { id: 'P4', num: 3, team: HOME, skin: '#edc6a2', hair: '#3b2a1e', Hm: 1.8,
+    u: kf([[0, .12], [5, .12], [9, .4], [14, .2]]), Z: kf([[0, 9], [5, 9], [9, 14], [14, 12]]),
+    Y: K(0), pose: steps([[0, 'stand'], [5, 'run']]), act: steps([[0, .05], [5, .4]]), face: 45 },
+  { id: 'P5', num: 32, team: AWAY, skin: '#b07f5a', hair: '#141110', Hm: 2.02,
+    u: kf([[0, .9], [5, .72], [9, .55], [14, .93]]), Z: kf([[0, 15], [5, 17], [9, 12], [14, 16]]),
+    Y: kf([[0, 0], [9.0, 0], [9.35, .7], [9.7, 0], [14, 0]]), pose: steps([[0, 'run'], [8.9, 'jump'], [9.75, 'run']]), act: kf([[0, .4], [8.8, .4], [9.0, 1], [9.7, 1], [9.9, .4]]), face: 0 },
+  { id: 'P6', num: 14, team: HOME, skin: '#e6bf9c', hair: '#2a2420', Hm: 1.84,
+    u: kf([[0, .42], [4, .85], [8, .76], [11, .3], [14, .36]]), Z: kf([[0, 17], [4, 14], [8, 17.5], [11, 15], [14, 8.5]]),
+    Y: K(0), pose: K('run'), act: K(.4), face: 0 }
+];
+
+// 観客（固定シードで生成）。A01, A02 … 静止。WAVE は手を振り、STAND は 6 秒に立ち上がる
+const SHIRTS = ['#2f5fb3', '#2f5fb3', '#c8423a', '#c8423a', '#e9ecee', '#2b2f36', '#e2c24a', '#4b8a5c', '#8a5cc7', '#d9822b', '#6b7a88'];
+const SKINS = ['#e2b893', '#c99a73', '#edc6a2', '#b07f5a', '#8d5b3f', '#e6bf9c', '#d5a882'];
+const HAIRS = ['#1c1714', '#3b2a1e', '#6b4a2e', '#141110', '#9a8a7a', '#2a2420', '#b08a4a'];
+function makeFans() {
+  const r = rngFrom(4242);
+  const fans = [];
+  let n = 0;
+  for (let k = 0; k < 6; k++) {
+    const Z = SC.crowdZ0 + 1.05 * k, seatY = .35 + .55 * k;
+    const half = (W / 2) / sOf(Z) + .4;
+    for (let X = -half + (k % 2) * .29; X <= half; X += .58) {
+      if (r() < .08) continue;   // 空席
+      n++;
+      const id = 'A' + String(n).padStart(3, '0');
+      const yaw = r() < .72 ? (r() - .5) * 40 : (r() < .5 ? -1 : 1) * (40 + r() * 30);
+      fans.push({ id, row: k, X: X + (r() - .5) * .14, Z: Z + (r() - .5) * .2, Y: seatY, Hm: 1.18 + r() * .14, yaw,
+        shirt: SHIRTS[Math.floor(r() * SHIRTS.length)], skin: SKINS[Math.floor(r() * SKINS.length)], hair: HAIRS[Math.floor(r() * HAIRS.length)],
+        act: .03 + r() * .05, dyn: null });
+    }
+  }
+  // 手を振る観客と、立ち上がる観客
+  const pick = (row, u) => { let best = null, bd = 1e9; for (const f of fans) if (f.row === row) { const fu = .5 + f.X * sOf(f.Z) / W; const d = Math.abs(fu - u); if (d < bd) { bd = d; best = f; } } return best; };
+  const wave = pick(1, .47); wave.dyn = 'wave'; wave.yaw = 0;
+  const stand = pick(2, .64); stand.dyn = 'stand'; stand.yaw = 5;
+  return fans;
+}
+const FANS = makeFans();
+
+function normYaw(y) { return ((y + 180) % 360 + 360) % 360 - 180; }
+const DISK = [[0, 0]];
+for (let i = 0; i < 6; i++) DISK.push([.5 * Math.cos(i * Math.PI / 3), .5 * Math.sin(i * Math.PI / 3)]);
+for (let i = 0; i < 8; i++) DISK.push([.88 * Math.cos(i * Math.PI / 4 + .3), .88 * Math.sin(i * Math.PI / 4 + .3)]);
+function inEll(px, py, e) { const dx = (px - e.x) / e.rx, dy = (py - e.y) / e.ry; return dx * dx + dy * dy <= 1; }
+
+function playerYaw(p, t) {
+  const d = .12;
+  const s = sOf(p.Z(t));
+  const dx = (p.u(t + d) - p.u(t - d)) * W / s;  // m
+  const dz = p.Z(t + d) - p.Z(t - d);
+  const sp = Math.hypot(dx, dz) / (2 * d);
+  if (sp < .6) return p.face;
+  return Math.atan2(dx, -dz) * 180 / Math.PI;   // こちらへ来る = 0、右へ = 90、奥へ = 180
+}
+
+function personGeom(st, Hm, seated) {
+  const s = sOf(st.Z);
+  st.s = s;
+  const x = st.u * W;
+  const crouch = st.pose === 'crouch' ? .06 : 0;
+  const feet = proj(st.Y, st.Z), top = proj(st.Y + Hm * (1 - crouch), st.Z);
+  const hh = feet - top;
+  st.cx = x; st.top = top; st.feet = feet; st.hh = hh; st.cy = (top + feet) / 2;
+  const ay = Math.abs(st.yaw);
+  st.view = ay < 35 ? 'front' : ay > 145 ? 'back' : 'side';
+  st.dir = st.yaw >= 0 ? 1 : -1;
+  const shapes = [];
+  if (seated) {
+    const hy = top + .1 * hh;
+    shapes.push({ x, y: hy, rx: .085 * hh, ry: .095 * hh, part: 'head' });
+    shapes.push({ x, y: top + .52 * hh, rx: (st.view === 'side' ? .13 : .19) * hh, ry: .32 * hh, part: 'body' });
+    st.headR = .09 * hh; st.headY = hy;
+    st.eye = st.view === 'back' ? null : { x: x + (st.view === 'side' ? st.dir * .045 * hh : 0), y: hy, r: .016 * hh };
+  } else {
+    const wide = st.view === 'side' ? .085 : .13;
+    const hy = top + .07 * hh;
+    shapes.push({ x, y: hy, rx: .07 * hh, ry: .075 * hh, part: 'head' });
+    shapes.push({ x, y: top + .33 * hh, rx: wide * hh, ry: .19 * hh, part: 'body' });
+    shapes.push({ x, y: top + .72 * hh, rx: (wide - .03) * hh, ry: .27 * hh, part: 'body' });
+    st.headR = .07 * hh; st.headY = hy;
+    st.eye = st.view === 'back' ? null : { x: x + (st.view === 'side' ? st.dir * .035 * hh : 0), y: hy, r: .012 * hh };
+  }
+  st.hpx = hh;
+  st.shapes = shapes;
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  for (const sh of shapes) { x0 = Math.min(x0, sh.x - sh.rx); x1 = Math.max(x1, sh.x + sh.rx); y0 = Math.min(y0, sh.y - sh.ry); y1 = Math.max(y1, sh.y + sh.ry); }
+  if (!seated) y1 = Math.max(y1, feet);
+  st.box = [x0, y0, x1, y1];
+  return st;
+}
+function playerState(p, t) {
+  const st = { id: p.id, kind: 'player', u: p.u(t), Z: p.Z(t), Y: p.Y(t), pose: p.pose(t), act: p.act(t), yaw: normYaw(playerYaw(p, t)) };
+  return personGeom(st, p.Hm, false);
+}
+function fanState(f, t) {
+  let Y = f.Y, act = f.act, pose = 'seated';
+  if (f.dyn === 'wave') { act = .55 + .15 * Math.sin(t * 5); pose = 'wave'; }
+  if (f.dyn === 'stand') {
+    const a = clamp((t - 6) / .8, 0, 1) - clamp((t - 9.5) / .8, 0, 1);
+    Y = f.Y + .45 * a; act = (t > 5.9 && t < 6.9) || (t > 9.4 && t < 10.4) ? .45 : .05; pose = a > .5 ? 'standing' : 'seated';
+  }
+  const st = { id: f.id, kind: 'fan', fan: f, u: .5 + f.X * sOf(f.Z) / W, Z: f.Z, Y, pose, act, yaw: f.yaw };
+  return personGeom(st, f.Hm + (Y - f.Y) * .8, true);
+}
+
+// 観客どうし・広告ボードによる隠れは固定なので最初に計算しておく
+const BOARD_TOP = proj(SC.boardH, SC.boardZ), BOARD_BOT = proj(0, SC.boardZ);
+function precomputeFans() {
+  const base = FANS.map(f => fanState(f, 0));
+  for (const st of base) {
+    const pts = [];
+    let n = 0, hn = 0;
+    for (const sh of st.shapes) for (const [dx, dy] of DISK) {
+      const px = sh.x + dx * sh.rx, py = sh.y + dy * sh.ry;
+      n++; if (sh.part === 'head') hn++;
+      if (px < 0 || px > W || py < 0 || py > H) continue;
+      if (py > BOARD_TOP && py < BOARD_BOT) continue;
+      let hid = false;
+      for (const o of base) { if (o === st || o.Z >= st.Z || o.fan.dyn) continue; for (const s2 of o.shapes) if (inEll(px, py, s2)) { hid = true; break; } if (hid) break; }
+      if (!hid) pts.push([px, py, sh.part === 'head']);
+    }
+    st.fan.pts = pts; st.fan.n = n; st.fan.hn = hn;
+  }
+}
+precomputeFans();
+
+function visPlayer(st, players) {
+  let n = 0, vis = 0, hn = 0, hv = 0;
+  for (const sh of st.shapes) for (const [dx, dy] of DISK) {
+    const px = sh.x + dx * sh.rx, py = sh.y + dy * sh.ry;
+    n++; if (sh.part === 'head') hn++;
+    if (px < 0 || px > W || py < 0 || py > H) continue;
+    let hid = false;
+    for (const o of players) { if (o === st || o.Z >= st.Z) continue; for (const s2 of o.shapes) if (inEll(px, py, s2)) { hid = true; break; } if (hid) break; }
+    if (!hid) { vis++; if (sh.part === 'head') hv++; }
+  }
+  st.vis = vis / n; st.headVis = hn ? hv / hn : 0;
+}
+function visFan(st, players) {
+  const f = st.fan;
+  let pts = f.pts, n = f.n, hn = f.hn;
+  if (f.dyn) {   // 動く観客はその場で点を作る（観客どうしの隠れは無視）
+    pts = []; n = 0; hn = 0;
+    for (const sh of st.shapes) for (const [dx, dy] of DISK) { const px = sh.x + dx * sh.rx, py = sh.y + dy * sh.ry; n++; if (sh.part === 'head') hn++; if (px < 0 || px > W || py < 0 || py > H || (py > BOARD_TOP && py < BOARD_BOT)) continue; pts.push([px, py, sh.part === 'head']); }
+  }
+  const [bx0, by0, bx1, by1] = st.box;
+  const over = players.filter(p => !(p.box[2] < bx0 || p.box[0] > bx1 || p.box[3] < by0 || p.box[1] > by1));
+  let vis = 0, hv = 0;
+  for (const [px, py, head] of pts) {
+    let hid = false;
+    for (const o of over) { for (const s2 of o.shapes) if (inEll(px, py, s2)) { hid = true; break; } if (hid) break; }
+    if (!hid) { vis++; if (head) hv++; }
+  }
+  st.vis = vis / n; st.headVis = hn ? hv / hn : 0;
+}
+
+function tolOf(fno) { const f = SC.f / 1000; return 0.03e-3 * fno / (f * f); }
+function blurPx(fno, Z, lensD) { const f = SC.f / 1000; return (f * f / fno) * Math.abs(1 / Z - lensD) * 1000 * PX_PER_MM; }
+function sens(cfg) { const i = cfg.sens - 1; return { margin: SENS.margin[i], confirm: SENS.confirm[i], hold: SENS.hold[i] }; }
+function weightsOf(cfg) { return cfg.preset === 'custom' ? cfg.custom : PRESETS[cfg.preset].w; }
+
+function makeSim(cfg, seed) {
+  const sim = {
+    cfg, rng: rngFrom(seed || 9001), frame: 0, t: 0,
+    lensD: 1 / SC.startZ, cmdQ: [], est: null, cur: null, curKind: null, pendId: null, pendN: 0, lostN: 0, kTrust: 1,
+    lastPos: null, tracks: {}, players: [], fans: [], cands: [], log: [], done: false, switches: 0,
+    hist: { cur: [], curKind: [], lens: [], p1Z: [], p1Ok: [], match: [], focusP1: [], fanSel: [], lensCrowd: [], hold: [] }
+  };
+  for (let i = 0; i < LAT; i++) sim.cmdQ.push(sim.lensD);
+  return sim;
+}
+
+const HISTN = 90;   // 1.5 秒
+function track(sim, id) {
+  return sim.tracks[id] || (sim.tracks[id] = { A: 0, seenF: -99, last: null, ring: new Float32Array(HISTN * 2), rn: 0, Dsm: null, crowd: 0, crowdFlag: false });
+}
+
+function stepSim(sim) {
+  if (sim.done) return;
+  const { cfg, rng } = sim;
+  const t = sim.t = sim.frame * DT;
+  const fno = FNOS[cfg.fnoIdx], tol = tolOf(fno);
+  const players = PLAYERS.map(p => playerState(p, t));
+  for (const st of players) visPlayer(st, players);
+  const fans = FANS.map(f => fanState(f, t));
+  for (const st of fans) visFan(st, players);
+  sim.players = players; sim.fans = fans;
+  const all = players.concat(fans);
+  const s = sens(cfg);
+  const raw = cfg.preset !== 'custom' && PRESETS[cfg.preset].raw;
+  const gateD = 1 / cfg.gateM;
+
+  // ——— 検出と手がかり
+  const cands = [];
+  for (const st of all) {
+    const tr = track(sim, st.id);
+    // 位置の履歴（静止度に使う）
+    const i0 = (tr.rn % HISTN) * 2; tr.ring[i0] = st.cx; tr.ring[i0 + 1] = st.cy; tr.rn++;
+    const b = blurPx(fno, st.Z, sim.lensD);
+    st.blur = b;
+    if (raw) {
+      if (st.vis < .08) continue;
+      const [x0, y0, x1, y1] = st.box;
+      if (x1 < .15 * W || x0 > .85 * W || y1 < .12 * H || y0 > .88 * H) continue;
+      const D = 1 / st.Z + gauss(rng) * .25 * tol;
+      tr.Dsm = tr.Dsm === null ? D : tr.Dsm * .8 + D * .2;
+      cands.push({ id: st.id, st, kind: st.kind, measD: D, f: { S: 0, N: 0, C: 0, E: 0, F: 0, V: 0, A: 0, R: 0, K: st.id === sim.cur ? 1 : 0 }, crowd: 0 });
+      continue;
+    }
+    const tracked = sim.frame - tr.seenF <= 5;
+    let p = 0;
+    if (st.vis >= .2 && st.hpx >= 10) {
+      p = clamp(.35 + (st.vis - .2) * 1.6, 0, .98);
+      if (b > .35 * st.hpx) p *= .6;
+      if (tracked) p = Math.max(p, .97);
+    } else if (tracked && st.vis >= .1) p = .9;
+    const det = rng() < p;
+    st.det = det;
+    if (!det) {
+      if (tracked && tr.last && st.vis > .02) {
+        const c0 = tr.last;
+        cands.push({ ...c0, st, coast: true, f: { ...c0.f, K: st.id === sim.cur ? sim.kTrust : 0, R: Math.exp(-Math.abs(c0.measD - sim.lensD) / (10 * tol)) } });
+      }
+      continue;
+    }
+    tr.seenF = sim.frame;
+    const measD = 1 / st.Z + gauss(rng) * .25 * tol * (1 + Math.abs(1 / st.Z - sim.lensD) / (6 * tol));
+    tr.Dsm = tr.Dsm === null ? measD : tr.Dsm * .8 + measD * .2;
+    const eyeOk = st.eye && st.headVis >= .5 && st.eye.r * 2 >= 1.6 && b < st.headR * 2 && Math.abs(st.yaw) < 120;
+    st.eyeDet = eyeOk && rng() < .92;
+    const facing = (1 + Math.cos(st.yaw * Math.PI / 180)) / 2 * Math.min(1, st.headVis * 1.4);
+    const actObs = clamp(st.act + gauss(rng) * .04, 0, 1);
+    tr.A = tr.A * .7 + clamp(.8 * actObs, 0, 1) * .3;
+    const dx = (st.cx - cfg.af.u * W) / W, dy = (st.cy - cfg.af.v * H) / W;
+    tr.last = {
+      id: st.id, st, kind: st.kind, measD,
+      f: {
+        S: clamp(Math.sqrt(st.hpx / (.6 * H)), 0, 1), N: 0,
+        C: Math.exp(-(dx * dx + dy * dy) / (2 * .18 * .18)),
+        E: st.eyeDet ? 1 : .3 * facing, F: facing, V: st.vis, A: tr.A,
+        R: Math.exp(-Math.abs(measD - sim.lensD) / (10 * tol)),
+        K: st.id === sim.cur ? sim.kTrust : 0
+      }
+    };
+    cands.push(tr.last);
+  }
+
+  // ——— ② 観客らしさ（静止 × 密集）。カメラが見えている情報だけで計算する
+  if (!raw) {
+    const n = cands.length, aD = new Float64Array(n), aX = new Float64Array(n), aY = new Float64Array(n), aH = new Float64Array(n);
+    for (let i = 0; i < n; i++) { const c = cands[i]; aD[i] = sim.tracks[c.id].Dsm; aX[i] = c.st.cx; aY[i] = c.st.cy; aH[i] = c.st.hpx; }
+    for (let i = 0; i < n; i++) {
+      const c = cands[i], tr = sim.tracks[c.id], st = c.st;
+      // 計算を間引く：4 コマに 1 回だけ更新（候補ごとにずらす）
+      if (tr.crowdF !== undefined && (sim.frame + tr.slot) % 4 !== 0) { c.crowd = tr.crowd; c.still = tr.still; c.dense = tr.dense; continue; }
+      if (tr.slot === undefined) tr.slot = i % 4;
+      tr.crowdF = sim.frame;
+      let still = .5;
+      const nh = Math.min(tr.rn, HISTN);
+      if (nh >= HISTN) {
+        let mx = 0;
+        for (let k = 0; k < nh; k++) { const d = Math.hypot(tr.ring[k * 2] - st.cx, tr.ring[k * 2 + 1] - st.cy); if (d > mx) mx = d; }
+        still = clamp(1 - mx / (.3 * st.hpx), 0, 1);
+      }
+      let dense = 0;
+      for (let j = 0; j < n; j++) {
+        if (j === i) continue;
+        if (Math.abs(aD[j] - aD[i]) > .006) continue;
+        const r = aH[j] / aH[i];
+        if (r < .6 || r > 1.6) continue;
+        if (Math.abs(aX[j] - aX[i]) > 3 * aH[i] || Math.abs(aY[j] - aY[i]) > 2 * aH[i]) continue;
+        dense++;
+      }
+      const sc = .5 * still + .5 * clamp((dense - 1) / 4, 0, 1);
+      tr.crowd = sc; tr.still = still; tr.dense = dense;
+      if (sc > .6) tr.crowdFlag = true; else if (sc < .5) tr.crowdFlag = false;
+      c.crowd = sc; c.still = still; c.dense = dense;
+    }
+  }
+
+  // 近さ（候補の中での順位）とスコア
+  if (cands.length) {
+    let mn = 1e9, mx = -1e9; for (const c of cands) { mn = Math.min(mn, c.measD); mx = Math.max(mx, c.measD); }
+    for (const c of cands) c.f.N = mx - mn < 1e-9 ? 1 : (c.measD - mn) / (mx - mn);
+  }
+  const w = raw ? { N: 1 } : weightsOf(cfg);
+  let wsum = 0; for (const [k] of FEATS) wsum += (w[k] || 0);
+  for (const c of cands) {
+    let sc = 0; for (const [k] of FEATS) sc += (w[k] || 0) * c.f[k];
+    c.score = wsum > 0 ? sc / wsum : 0;
+    // 対策による除外（減点ではなく候補から外す）
+    c.ex = null;
+    if (cfg.gGate && sim.tracks[c.id].Dsm < gateD) c.ex = 'gate';
+    else if (cfg.gCrowd && !raw && sim.tracks[c.id].crowdFlag) c.ex = 'crowd';
+  }
+  cands.sort((a, b) => b.score - a.score);
+  sim.cands = cands;
+  const elig = cands.filter(c => !c.ex);
+  sim.nElig = elig.length;
+
+  if (sim.cur && wsum > 0) {
+    const noK = c => c.score - (w.K || 0) * c.f.K / wsum;
+    const cc = elig.find(c => c.id === sim.cur);
+    const better = cc && elig.some(c => c.id !== sim.cur && noK(c) > noK(cc));
+    sim.kTrust = better ? Math.max(0, sim.kTrust - DT / 1.0) : Math.min(1, sim.kTrust + DT / .5);
+  }
+
+  // ——— 乗り移り判定
+  const curC = elig.find(c => c.id === sim.cur);
+  const best = elig[0];
+  const margin = raw ? .02 : s.margin, confirm = raw ? 3 : s.confirm;
+  if (!sim.cur) {
+    if (sim.frame >= 8) {
+      // 半押し：AF 点の下にいる被写体から始める
+      const ax = cfg.af.u * W, ay = cfg.af.v * H;
+      let pick = null, bd = 1e9;
+      for (const c of elig) {
+        const [x0, y0, x1, y1] = c.st.box;
+        const inside = ax >= x0 && ax <= x1 && ay >= y0 && ay <= y1;
+        const d = (inside ? 0 : 1e4) + Math.hypot(c.st.cx - ax, c.st.cy - ay) - c.measD * 1000;
+        if (d < bd) { bd = d; pick = c; }
+      }
+      if (pick) switchTo(sim, pick, null, '半押しで AF 点の下の被写体');
+    }
+  } else if (!curC) {
+    const exNow = cands.find(c => c.id === sim.cur && c.ex);
+    if (exNow) { if (best) switchTo(sim, best, null, exNow.ex === 'gate' ? '距離ゲートの外に出たため' : '観客と判定されたため'); }
+    else {
+      sim.lostN++;
+      if (sim.lostN === 1) addLog(sim, `${nmOf(sim.cur)} を見失った（ピントを保持して待つ）`, 'warn');
+      if (cfg.gLocal && sim.lastPos) {
+        const lp = sim.lastPos, lt = sim.lostN * DT;
+        const px = lp.x + lp.vx * lt, py = lp.y + lp.vy * lt, rad = lp.h * (1.2 + 2 * lt);
+        const near = elig.filter(c => Math.hypot(c.st.cx - px, c.st.cy - py) < rad && Math.abs(c.measD - (sim.est ? sim.est.D : sim.lensD)) < .015);
+        const nb = near[0];
+        if (nb) { if (sim.pendId === nb.id) sim.pendN++; else { sim.pendId = nb.id; sim.pendN = 1; } if (sim.pendN >= 3) switchTo(sim, nb, null, '予測位置の近くで再捕捉'); }
+        else { sim.pendId = null; sim.pendN = 0; }
+        if (sim.cur && sim.lostN > 120 && best) switchTo(sim, best, null, '2 秒見つからず全体から選び直し');
+      } else if (sim.lostN > s.hold && best) switchTo(sim, best, null, '見失ったので乗り移り');
+    }
+  } else {
+    if (sim.lostN > 0) addLog(sim, `${nmOf(sim.cur)} を再び捕捉`, sim.curKind === 'fan' ? 'bad' : 'ok');
+    sim.lostN = 0;
+    const st = curC.st;
+    if (sim.lastPos) { sim.lastPos.vx = sim.lastPos.vx * .8 + (st.cx - sim.lastPos.x) / DT * .2; sim.lastPos.vy = sim.lastPos.vy * .8 + (st.cy - sim.lastPos.y) / DT * .2; sim.lastPos.x = st.cx; sim.lastPos.y = st.cy; sim.lastPos.h = st.hpx; }
+    else sim.lastPos = { x: st.cx, y: st.cy, vx: 0, vy: 0, h: st.hpx };
+    if (best && best.id !== sim.cur && best.score > curC.score + margin) {
+      if (sim.pendId === best.id) sim.pendN++; else { sim.pendId = best.id; sim.pendN = 1; }
+      if (sim.pendN >= confirm) switchTo(sim, best, curC);
+    } else { sim.pendId = null; sim.pendN = 0; }
+  }
+
+  // ——— 位相差AF とレンズ
+  const sel = cands.find(c => c.id === sim.cur && !c.ex);
+  if (sel && !sel.coast) {
+    const m = sel.measD;
+    if (!sim.est) sim.est = { D: m, v: 0 };
+    else { const pred = sim.est.D + sim.est.v * DT; const r = m - pred; sim.est.D = pred + .5 * r; sim.est.v = clamp(sim.est.v + .1 * r / DT, -2, 2); }
+  } else if (sim.est) { sim.est.v *= .9; sim.est.D += sim.est.v * DT; }
+  let cmd = sim.est ? sim.est.D + sim.est.v * (LAT + 1) * DT : sim.lensD;
+  if (cfg.gGate) cmd = Math.max(cmd, gateD);   // フォーカスリミッター
+  sim.cmdQ.push(cmd);
+  const tgt = sim.cmdQ.shift();
+  sim.lensD += clamp(tgt - sim.lensD, -SC.motor * DT, SC.motor * DT);
+
+  // ——— 評価
+  const p1 = players[0];
+  const h = sim.hist;
+  const p1Ok = p1.vis >= .3;
+  h.cur.push(sim.cur); h.curKind.push(sim.curKind); h.lens.push(sim.lensD); h.p1Z.push(p1.Z); h.p1Ok.push(p1Ok);
+  h.match.push(sim.cur === 'P1');
+  h.focusP1.push(Math.abs(sim.lensD - 1 / p1.Z) <= tol);
+  h.fanSel.push(sim.curKind === 'fan');
+  h.lensCrowd.push(sim.lensD < 1 / (SC.crowdZ0 - 1));
+  h.hold.push(sim.lostN > 0);
+  sim.status = { p1Ok, match: sim.cur === 'P1', inFocus: Math.abs(sim.lensD - 1 / p1.Z) <= tol, fan: sim.curKind === 'fan' };
+  sim.frame++;
+  if (sim.frame >= DUR * FPS) sim.done = true;
+}
+
+function switchTo(sim, c, old, why) {
+  const prev = sim.cur;
+  sim.cur = c.id; sim.curKind = c.kind; sim.pendId = null; sim.pendN = 0; sim.lostN = 0; sim.kTrust = 1;
+  sim.est = { D: c.measD, v: 0 };
+  sim.lastPos = { x: c.st.cx, y: c.st.cy, vx: 0, vy: 0, h: c.st.hpx };
+  if (prev) sim.switches++;
+  if (!why && old) {
+    const w = sim.cfg.preset === 'raw' ? { N: 1 } : weightsOf(sim.cfg);
+    let bk = 'N', bv = -1e9;
+    for (const [k] of FEATS) { if (k === 'K') continue; const d = (w[k] || 0) * (c.f[k] - old.f[k]); if (d > bv) { bv = d; bk = k; } }
+    why = `決め手：${FEATS.find(x => x[0] === bk)[1]}`;
+  }
+  const kind = c.kind === 'fan' ? 'bad' : c.id === 'P1' ? 'ok' : 'warn';
+  const name = c.kind === 'fan' ? `観客 ${c.id}` : c.id;
+  addLog(sim, prev ? `${nmOf(prev)} → ${name} に乗り移り（${why}）` : `${name} を選択（${why}）`, kind);
+}
+const nmOf = id => id && id[0] === 'A' ? `観客 ${id}` : id;
+function addLog(sim, msg, kind) { sim.log.push({ t: sim.frame * DT, msg, kind }); }
+
+function metrics(sim) {
+  const h = sim.hist, n = h.cur.length || 1;
+  let fan = 0, lc = 0, pn = 0, m = 0, f = 0;
+  for (let i = 0; i < h.cur.length; i++) {
+    if (h.fanSel[i]) fan++;
+    if (h.lensCrowd[i]) lc++;
+    if (h.p1Ok[i]) { pn++; if (h.match[i]) m++; if (h.focusP1[i]) f++; }
+  }
+  return { fan: fan / n, lensCrowd: lc / n, match: pn ? m / pn : NaN, focus: pn ? f / pn : NaN, switches: sim.switches };
+}
+function runAll(cfg) { const sim = makeSim(cfg, 9001); while (!sim.done) stepSim(sim); return metrics(sim); }
+// CORE-END
+</script>
+
+<script>
+// ———— 描画と UI
+const $ = id => document.getElementById(id);
+const vf = $('vf'), ctx = vf.getContext('2d');
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const PCOL = ['--c1', '--c2', '--c3', '--c4', '--c5', '--c6'];
+const colOf = id => id && id[0] === 'P' ? css(PCOL[(+id.slice(1) - 1) % 6]) : css('--bad');
+
+const cfg = { preset: 'eye', custom: { ...PRESETS.smart.w }, sens: 3, fnoIdx: 3, af: { u: .3, v: .45 }, gGate: true, gCrowd: true, gLocal: true, gateM: 19 };
+let sim = null, playing = true, rate = 1, acc = 0, lastTs = null, logShown = 0, lastScoreF = -99, lastChartF = -99;
+
+const FILTER_OK = (() => { try { const c = document.createElement('canvas').getContext('2d'); c.filter = 'blur(2px)'; return c.filter === 'blur(2px)'; } catch (e) { return false; } })();
+function withBlur(c, b, draw) {
+  const r = Math.min(b / 2.2, 24);
+  if (r < .35) { draw(c); return; }
+  if (FILTER_OK) { c.save(); c.filter = `blur(${r.toFixed(2)}px)`; draw(c); c.restore(); return; }
+  c.save(); c.globalAlpha = .45; draw(c);
+  for (let i = 0; i < 6; i++) { c.save(); c.translate(Math.cos(i * Math.PI / 3) * r * .7, Math.sin(i * Math.PI / 3) * r * .7); c.globalAlpha = .26; draw(c); c.restore(); }
+  c.restore();
+}
+function ell(c, x, y, rx, ry, rot) { c.beginPath(); c.ellipse(x, y, Math.max(rx, .1), Math.max(ry, .1), rot || 0, 0, Math.PI * 2); c.fill(); }
+
+// ——— 背景：床・観客席・静止した観客（ボケ量ごとに事前描画）
+const BG_LEVELS = [0, 1, 2, 3.5, 5.5, 8, 12, 17, 24];
+let bgCache = null;
+function drawFan(c, st) {
+  const f = st.fan, x = st.cx, top = st.top, hh = st.hh;
+  const hr = .09 * hh, hy = top + .1 * hh;
+  // 腕
+  c.strokeStyle = f.shirt; c.lineCap = 'round'; c.lineWidth = Math.max(1.2, .08 * hh);
+  if (st.pose === 'wave') {
+    const a = Math.sin(sim ? sim.t * 9 : 0) * .08 * hh;
+    c.beginPath(); c.moveTo(x + .15 * hh, top + .3 * hh); c.lineTo(x + .26 * hh + a, top - .12 * hh); c.moveTo(x - .15 * hh, top + .3 * hh); c.lineTo(x - .24 * hh - a, top - .1 * hh); c.stroke();
+    c.fillStyle = f.skin; ell(c, x + .26 * hh + a, top - .14 * hh, .035 * hh, .04 * hh); ell(c, x - .24 * hh - a, top - .12 * hh, .035 * hh, .04 * hh);
+  }
+  c.fillStyle = f.shirt;
+  const bw = (st.view === 'side' ? .13 : .19) * hh;
+  c.beginPath(); if (c.roundRect) c.roundRect(x - bw, top + .2 * hh, bw * 2, .7 * hh, .07 * hh); else c.rect(x - bw, top + .2 * hh, bw * 2, .7 * hh); c.fill();
+  c.fillStyle = f.skin; ell(c, x, hy, hr * .92, hr);
+  c.fillStyle = f.hair;
+  if (st.view === 'back') ell(c, x, hy, hr, hr);
+  else if (st.view === 'side') ell(c, x - st.dir * .25 * hr, hy - .45 * hr, hr * .85, hr * .6);
+  else ell(c, x, hy - .55 * hr, hr * .95, hr * .5);
+  if (st.view !== 'back') {
+    c.fillStyle = '#1a1412';
+    if (st.view === 'front') { ell(c, x - .36 * hr, hy + .05 * hr, .12 * hr, .14 * hr); ell(c, x + .36 * hr, hy + .05 * hr, .12 * hr, .14 * hr); }
+    else ell(c, x + st.dir * .5 * hr, hy + .02 * hr, .12 * hr, .14 * hr);
+  }
+}
+function drawBackground(c) {
+  // 観客席の壁と段
+  const g = c.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#2b2f3a'); g.addColorStop(.6, '#3a3f4c'); g.addColorStop(1, '#3a3f4c');
+  c.fillStyle = g; c.fillRect(0, 0, W, H);
+  for (let k = 0; k < 7; k++) {
+    const Z = SC.crowdZ0 + 1.05 * k, Y = .35 + .55 * k;
+    const y = proj(Y + .45, Z);
+    c.fillStyle = k % 2 ? '#454b59' : '#3f4552'; c.fillRect(0, y, W, proj(Y - .1, Z) - y);
+    c.fillStyle = 'rgba(200,60,60,.35)'; c.fillRect(0, proj(Y + .5, Z), W, 3);
+  }
+  // 静止した観客（奥の列から）
+  const sts = FANS.filter(f => !f.dyn).map(f => fanState(f, 0)).sort((a, b) => b.Z - a.Z);
+  for (const st of sts) drawFan(c, st);
+  // 床（コート）
+  const fy = BOARD_BOT;
+  const fg = c.createLinearGradient(0, fy, 0, H);
+  fg.addColorStop(0, '#b98a57'); fg.addColorStop(1, '#d4a46c');
+  c.fillStyle = fg; c.fillRect(0, fy, W, H - fy);
+  c.strokeStyle = 'rgba(120,70,30,.18)'; c.lineWidth = 1;
+  for (let i = -40; i < 40; i++) { const X = i * .5; c.beginPath(); c.moveTo(W / 2 + X * sOf(19.5), proj(0, 19.5)); c.lineTo(W / 2 + X * sOf(6), proj(0, 6)); c.stroke(); }
+  c.strokeStyle = 'rgba(255,255,255,.85)'; c.lineWidth = 2;
+  for (const Z of [18.5, 13]) { c.beginPath(); c.moveTo(0, proj(0, Z)); c.lineTo(W, proj(0, Z)); c.stroke(); }
+  c.beginPath(); c.ellipse(W * .62, proj(0, 15.5), 3.6 * sOf(15.5), (proj(0, 13) - proj(0, 18.5)) / 2.2, 0, 0, Math.PI * 2); c.stroke();
+}
+function buildBg() {
+  const base = document.createElement('canvas'); base.width = W; base.height = H;
+  drawBackground(base.getContext('2d'));
+  bgCache = BG_LEVELS.map(b => {
+    if (b === 0) return base;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    if (FILTER_OK) { c.filter = `blur(${b}px)`; c.drawImage(base, -b * 2, -b * 2, W + b * 4, H + b * 4); }
+    else { const k = Math.max(1, b / 1.2); const sm = document.createElement('canvas'); sm.width = Math.ceil(W / k); sm.height = Math.ceil(H / k); sm.getContext('2d').drawImage(base, 0, 0, sm.width, sm.height); c.drawImage(sm, 0, 0, W, H); }
+    return cv;
+  });
+}
+function drawBoard(c) {
+  const y0 = BOARD_TOP, y1 = BOARD_BOT;
+  c.fillStyle = '#10141c'; c.fillRect(0, y0, W, y1 - y0);
+  const g = c.createLinearGradient(0, 0, W, 0);
+  g.addColorStop(0, '#1d6fd1'); g.addColorStop(.33, '#1d6fd1'); g.addColorStop(.34, '#e8b02a'); g.addColorStop(.66, '#e8b02a'); g.addColorStop(.67, '#d23c3c'); g.addColorStop(1, '#d23c3c');
+  c.fillStyle = g; c.fillRect(0, y0 + 3, W, y1 - y0 - 6);
+  c.fillStyle = 'rgba(255,255,255,.85)'; c.font = `700 ${Math.round((y1 - y0) * .5)}px "Barlow Semi Condensed", sans-serif`; c.textBaseline = 'middle'; c.textAlign = 'center';
+  for (const [u, s] of [[.16, 'COURTSIDE'], [.5, 'SIM ARENA'], [.83, 'FAST BREAK']]) c.fillText(s, u * W, (y0 + y1) / 2);
+  c.textAlign = 'left';
+}
+function drawPlayer(c, p, st) {
+  const S = p.team, x = st.cx, top = st.top, hh = st.hh, d = st.dir, t = sim.t;
+  const side = st.view === 'side', wv = side ? .085 : .13;
+  c.lineCap = 'round';
+  const legW = Math.max(2, .075 * hh), armW = Math.max(1.5, .05 * hh);
+  const hipY = top + .5 * hh, footY = top + hh;
+  const swing = st.pose === 'run' ? Math.sin(t * 2.6 * Math.PI * 2 + p.num) * .13 * hh : 0;
+  c.strokeStyle = p.skin; c.lineWidth = legW; c.beginPath();
+  if (st.pose === 'jump') { c.moveTo(x - .04 * hh, hipY); c.lineTo(x - .1 * hh, hipY + .22 * hh); c.lineTo(x - .05 * hh, footY - .06 * hh); c.moveTo(x + .04 * hh, hipY); c.lineTo(x + .1 * hh, hipY + .22 * hh); c.lineTo(x + .05 * hh, footY - .06 * hh); }
+  else if (side) { c.moveTo(x, hipY); c.lineTo(x + swing * d, footY); c.moveTo(x, hipY); c.lineTo(x - swing * d, footY); }
+  else { c.moveTo(x - .045 * hh, hipY); c.lineTo(x - .05 * hh + swing * .25, footY); c.moveTo(x + .045 * hh, hipY); c.lineTo(x + .05 * hh - swing * .25, footY); }
+  c.stroke();
+  c.strokeStyle = '#f4f4f4'; c.lineWidth = legW * 1.05; c.beginPath();
+  for (const s2 of [-1, 1]) { c.moveTo(x + s2 * .05 * hh, footY - .02 * hh); c.lineTo(x + s2 * .05 * hh + (side ? d * .04 * hh : 0), footY); }
+  c.stroke();
+  // ショーツ
+  c.fillStyle = S.bottom === '#f2f4f6' ? '#e8eaee' : S.bottom; c.fillRect(x - wv * hh, top + .47 * hh, wv * 2 * hh, .14 * hh);
+  // 腕
+  c.strokeStyle = p.skin; c.lineWidth = armW; const shY = top + .19 * hh; c.beginPath();
+  if (st.pose === 'jump') { c.moveTo(x - wv * hh * .8, shY); c.lineTo(x - .12 * hh, top - .12 * hh); c.moveTo(x + wv * hh * .8, shY); c.lineTo(x + .12 * hh, top - .12 * hh); }
+  else if (side) { c.moveTo(x, shY); c.lineTo(x - swing * d * .8, shY + .3 * hh); }
+  else { c.moveTo(x - wv * hh * .9, shY); c.lineTo(x - (wv + .05) * hh - swing * .2, shY + .3 * hh); c.moveTo(x + wv * hh * .9, shY); c.lineTo(x + (wv + .05) * hh + swing * .2, shY + .3 * hh); }
+  c.stroke();
+  // ユニフォーム
+  c.fillStyle = S.top; c.beginPath();
+  if (c.roundRect) c.roundRect(x - wv * hh, top + .15 * hh, wv * 2 * hh, .34 * hh, .04 * hh); else c.rect(x - wv * hh, top + .15 * hh, wv * 2 * hh, .34 * hh);
+  c.fill();
+  if (st.view !== 'side') { c.fillStyle = S.num; c.font = `700 ${Math.round(.13 * hh)}px "Barlow Semi Condensed", sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(String(p.num), x, top + .32 * hh); c.textAlign = 'left'; }
+  // 頭
+  const hy = top + .07 * hh, hr = .07 * hh;
+  c.fillStyle = p.skin; ell(c, x, hy, hr * .95, hr);
+  c.fillStyle = p.hair;
+  if (st.view === 'back') ell(c, x, hy - .05 * hr, hr, hr * .98);
+  else if (side) ell(c, x - d * .25 * hr, hy - .45 * hr, hr * .85, hr * .6);
+  else ell(c, x, hy - .55 * hr, hr * .95, hr * .5);
+  if (st.view === 'front') { c.fillStyle = '#1a1412'; ell(c, x - .38 * hr, hy + .05 * hr, .11 * hr, .13 * hr); ell(c, x + .38 * hr, hy + .05 * hr, .11 * hr, .13 * hr); }
+  else if (side) { c.fillStyle = '#1a1412'; ell(c, x + d * .5 * hr, hy + .02 * hr, .1 * hr, .12 * hr); c.fillStyle = p.skin; ell(c, x + d * .95 * hr, hy + .2 * hr, .15 * hr, .12 * hr); }
+}
+
+function render() {
+  const fno = FNOS[cfg.fnoIdx];
+  const bb = blurPx(fno, 23.5, sim.lensD) / 2.2;
+  let li = 0; for (let i = 0; i < BG_LEVELS.length; i++) if (Math.abs(BG_LEVELS[i] - bb) < Math.abs(BG_LEVELS[li] - bb)) li = i;
+  ctx.drawImage(bgCache[li], 0, 0);
+  for (const st of sim.fans) if (st.fan.dyn) withBlur(ctx, blurPx(fno, st.Z, sim.lensD), c => drawFan(c, st));
+  withBlur(ctx, blurPx(fno, SC.boardZ, sim.lensD), drawBoard);
+  const order = sim.players.map((st, i) => i).sort((a, b) => sim.players[b].Z - sim.players[a].Z);
+  for (const i of order) withBlur(ctx, blurPx(fno, sim.players[i].Z, sim.lensD), c => drawPlayer(c, PLAYERS[i], sim.players[i]));
+  drawOverlay();
+}
+function corners(x0, y0, x1, y1, len) {
+  ctx.beginPath();
+  ctx.moveTo(x0, y0 + len); ctx.lineTo(x0, y0); ctx.lineTo(x0 + len, y0);
+  ctx.moveTo(x1 - len, y0); ctx.lineTo(x1, y0); ctx.lineTo(x1, y0 + len);
+  ctx.moveTo(x1, y1 - len); ctx.lineTo(x1, y1); ctx.lineTo(x1 - len, y1);
+  ctx.moveTo(x0 + len, y1); ctx.lineTo(x0, y1); ctx.lineTo(x0, y1 - len);
+  ctx.stroke();
+}
+function clipBox(b) { return [clamp(b[0], 3, W - 3), clamp(b[1], 3, H - 3), clamp(b[2], 3, W - 3), clamp(b[3], 3, H - 3)]; }
+function label(txt, x, y, col, bold) {
+  ctx.font = `${bold ? 700 : 600} 13px "Barlow Semi Condensed", "Noto Sans JP", sans-serif`;
+  const w = ctx.measureText(txt).width + 8;
+  x = clamp(x, 2, W - w - 2); y = clamp(y, 18, H - 28);
+  ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(x, y - 16, w, 16);
+  ctx.fillStyle = col; ctx.textBaseline = 'bottom'; ctx.fillText(txt, x + 4, y - 1);
+}
+function drawOverlay() {
+  const raw = cfg.preset !== 'custom' && PRESETS[cfg.preset].raw;
+  const okC = '#3fdc84', warnC = '#ffb340', badC = '#ff5a4c';
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]);
+  if (raw) ctx.strokeRect(.15 * W, .12 * H, .7 * W, .76 * H);
+  else { const ax = cfg.af.u * W, ay = cfg.af.v * H; ctx.strokeRect(ax - 14, ay - 14, 28, 28); }
+  ctx.setLineDash([]);
+  // 観客の検出結果
+  if ($('showFans').checked && !raw) {
+    for (const c of sim.cands) {
+      if (c.kind !== 'fan' || c.id === sim.cur) continue;
+      const st = c.st, r = Math.max(4, st.headR * 1.25);
+      if (c.ex) {
+        ctx.strokeStyle = 'rgba(160,230,190,.55)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(st.cx - r * .6, st.headY - r * .6); ctx.lineTo(st.cx + r * .6, st.headY + r * .6); ctx.moveTo(st.cx + r * .6, st.headY - r * .6); ctx.lineTo(st.cx - r * .6, st.headY + r * .6); ctx.stroke();
+      } else {
+        ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 1; ctx.strokeRect(st.cx - r, st.headY - r, r * 2, r * 2);
+      }
+    }
+  }
+  if ($('showCands').checked && !raw) {
+    for (const c of sim.cands) {
+      if (c.kind !== 'player' || c.id === sim.cur) continue;
+      const b = clipBox(c.st.box), pend = c.id === sim.pendId;
+      ctx.strokeStyle = c.ex ? 'rgba(255,255,255,.3)' : pend ? warnC : 'rgba(255,255,255,.75)'; ctx.lineWidth = pend ? 2 : 1.2;
+      if (pend) ctx.setLineDash([5, 4]);
+      corners(b[0], b[1], b[2], b[3], Math.min(12, (b[2] - b[0]) / 3));
+      ctx.setLineDash([]);
+      label(`${c.id} ${Math.round(c.score * 100)}`, b[0], b[1] - 2, pend ? warnC : 'rgba(255,255,255,.9)');
+    }
+  }
+  if (sim.pendId && sim.pendId[0] === 'A') {
+    const c = sim.cands.find(x => x.id === sim.pendId);
+    if (c) { const b = clipBox(c.st.box); ctx.strokeStyle = warnC; ctx.lineWidth = 2; ctx.setLineDash([4, 3]); ctx.strokeRect(b[0], b[1], b[2] - b[0], b[3] - b[1]); ctx.setLineDash([]); }
+  }
+  const curS = sim.players.find(s => s.id === sim.cur) || sim.fans.find(s => s.id === sim.cur);
+  if (curS) {
+    const isFan = curS.kind === 'fan';
+    const col = isFan ? badC : sim.cur === 'P1' ? okC : warnC;
+    const b = clipBox(curS.box);
+    ctx.strokeStyle = sim.lostN > 0 ? 'rgba(255,255,255,.5)' : col; ctx.lineWidth = 3;
+    corners(b[0], b[1], b[2], b[3], Math.min(18, (b[2] - b[0]) / 2.5));
+    label(isFan ? `観客 ${sim.cur}` : `${sim.cur}${sim.lostN > 0 ? ' 見失い中' : ''}`, b[0], b[1] - 2, col, true);
+    if ($('showEye').checked && curS.eyeDet && curS.eye) { ctx.strokeStyle = col; ctx.lineWidth = 2; const r = Math.max(4, curS.eye.r * 2.6); ctx.strokeRect(curS.eye.x - r, curS.eye.y - r, r * 2, r * 2); }
+  }
+  if ($('showEye').checked) for (const c of sim.cands) if (c.kind === 'player' && c.id !== sim.cur && c.st.eyeDet && c.st.eye) { ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 1; const r = Math.max(4, c.st.eye.r * 2.4); ctx.strokeRect(c.st.eye.x - r, c.st.eye.y - r, r * 2, r * 2); }
+  // 対策の表示
+  ctx.font = '600 12.5px "Barlow Semi Condensed", "Noto Sans JP", sans-serif'; ctx.textBaseline = 'top';
+  const g = [cfg.gGate ? `① AF範囲 〜${cfg.gateM} m` : null, cfg.gCrowd ? '② 観客判定' : null, cfg.gLocal ? '③ 周辺探索' : null].filter(Boolean);
+  const gt = g.length ? '対策：' + g.join('  ') : '対策なし';
+  const tw = ctx.measureText(gt).width + 12;
+  ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(8, 8, tw, 20);
+  ctx.fillStyle = g.length ? '#9ff0c0' : '#ffb0a8'; ctx.fillText(gt, 14, 11);
+  // 下部
+  ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(0, H - 26, W, 26);
+  ctx.font = '500 13px "JetBrains Mono", monospace'; ctx.fillStyle = '#e8efe9'; ctx.textBaseline = 'middle';
+  ctx.fillText(`${sim.t.toFixed(2)} s   ${SC.f}mm f/${FNOS[cfg.fnoIdx]}   ピント ${(1 / sim.lensD).toFixed(1)} m`, 10, H - 13);
+  const st = sim.status || {};
+  ctx.textAlign = 'right';
+  ctx.fillStyle = st.fan ? badC : st.match && st.inFocus ? okC : warnC;
+  ctx.fillText(sim.cur ? `選択 ${sim.curKind === 'fan' ? '観客 ' + sim.cur : sim.cur}` : '—', W - 10, H - 13);
+  ctx.textAlign = 'left';
+  ctx.restore();
+}
+
+// ——— スコア表
+function renderScores() {
+  const raw = cfg.preset !== 'custom' && PRESETS[cfg.preset].raw;
+  const w = raw ? { N: 1 } : weightsOf(cfg);
+  const thead = $('scoreTbl').tHead, tb = $('scoreTbl').tBodies[0];
+  const key = cfg.preset + JSON.stringify(w);
+  if (thead.dataset.k !== key) {
+    thead.dataset.k = key;
+    thead.innerHTML = '<tr><th style="text-align:left">被写体</th>' + FEATS.map(([k, n]) => `<th class="${(w[k] || 0) ? '' : 'off'}">${n}<br><small style="font-family:var(--font-mono);font-weight:400">×${(w[k] || 0).toFixed(2)}</small></th>`).join('') + '<th style="text-align:left">合計</th><th style="text-align:left">観客らしさ・判定</th></tr>';
+  }
+  const rows = [];
+  const pc = sim.cands.filter(c => c.kind === 'player');
+  const shown = new Set();
+  for (const c of pc) { shown.add(c.id); rows.push(rowHtml(c, w, raw)); }
+  for (const st of sim.players) if (!shown.has(st.id)) rows.push(`<tr class="miss"><td class="name"><i style="background:${colOf(st.id)}"></i>${st.id}${tags(st.id)}</td><td colspan="${FEATS.length + 2}" style="text-align:left">${st.vis < .2 ? '他の選手に隠れている・画面外' : '検出されず'}</td></tr>`);
+  const fc = sim.cands.filter(c => c.kind === 'fan');
+  const topF = fc.slice(0, 3);
+  if (sim.curKind === 'fan' && !topF.some(c => c.id === sim.cur)) { const c = fc.find(x => x.id === sim.cur); if (c) topF.unshift(c); }
+  for (const c of topF) rows.push(rowHtml(c, w, raw));
+  const exG = fc.filter(c => c.ex === 'gate').length, exC = fc.filter(c => c.ex === 'crowd').length;
+  rows.push(`<tr class="sum"><td colspan="${FEATS.length + 3}">観客 ${FANS.length} 人のうち ${raw ? '候補' : '検出'} ${fc.length} 人${exG + exC ? `／距離ゲートで除外 ${exG} 人・観客判定で除外 ${exC} 人` : '／除外なし（すべて候補）'}</td></tr>`);
+  tb.innerHTML = rows.join('');
+  const s = sens(cfg);
+  const nm = id => id && id[0] === 'A' ? `観客 ${id}` : id;
+  $('scoreState').textContent = sim.lostN > 0 ? `${nm(sim.cur)} 見失い ${sim.lostN} コマ` : sim.pendId ? `${nm(sim.pendId)} へ乗り移り待ち ${sim.pendN}/${raw ? 3 : s.confirm}` : sim.cur ? `${nm(sim.cur)} を追跡中` : '—';
+}
+function tags(id) {
+  let t = '';
+  if (id === sim.cur) t += '<span class="tag sel">選択</span>';
+  if (id === sim.pendId) t += '<span class="tag pend">待ち</span>';
+  if (id === 'P1') t += '<span class="tag ideal">主役</span>';
+  return t;
+}
+function rowHtml(c, w, raw) {
+  const fan = c.kind === 'fan';
+  const nm = fan ? `<span class="fanword">観客</span> ${c.id}` : c.id;
+  let h = `<tr class="${c.id === sim.cur ? 'sel' : ''} ${fan ? 'fan' : ''} ${c.ex ? 'ex' : ''}"><td class="name"><i style="background:${colOf(c.id)}"></i>${nm}${tags(c.id)}</td>`;
+  for (const [k] of FEATS) {
+    const v = c.f[k], on = (w[k] || 0) > 0;
+    h += raw && k !== 'N' ? `<td class="off">—</td>` : `<td class="f ${on ? '' : 'off'}" style="--v:${v.toFixed(2)}">${Math.round(v * 100)}</td>`;
+  }
+  h += `<td class="tot">${Math.round(c.score * 100)}<div class="bar" style="width:${Math.round(c.score * 100)}%;background:${colOf(c.id)}"></div></td>`;
+  const cr = raw ? '—' : `${Math.round((c.crowd || 0) * 100)}%`;
+  const why = c.ex === 'gate' ? `<span class="ex-gate">除外：距離ゲート外（${(1 / sim.tracks[c.id].Dsm).toFixed(1)} m）</span>` : c.ex === 'crowd' ? `<span class="ex-crowd">除外：観客（静止 ${Math.round(c.still * 100)}%・周り ${c.dense} 人）</span>` : '候補';
+  h += `<td class="judge">${cr}　${why}</td></tr>`;
+  return h;
+}
+
+// ——— 距離グラフ
+const tl = $('tl'), tctx = tl.getContext('2d');
+const mapc = $('map'), mctx = mapc.getContext('2d');
+function sizeCanvases() {
+  const dpr = window.devicePixelRatio || 1;
+  for (const [cv, c, h] of [[tl, tctx, 270], [mapc, mctx, 260]]) { const w = cv.clientWidth; cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); cv.style.height = h + 'px'; c.setTransform(dpr, 0, 0, dpr, 0, 0); }
+}
+function renderChart() {
+  const w = tl.clientWidth, L = 46, R = 10, T = 8, PH = 170, SH = 16, G = 6;
+  tctx.clearRect(0, 0, w, 270);
+  const ink = css('--ink'), muted = css('--muted'), line = css('--line'), acc = css('--accent'), warn = css('--warn'), bad = css('--bad'), sunk = css('--sunk');
+  const X = f => L + (w - L - R) * f / (DUR * FPS);
+  const lo = Math.log(7), hi = Math.log(30);
+  const Y = m => T + PH * (1 - (Math.log(clamp(m, 7, 30)) - lo) / (hi - lo));
+  tctx.font = '12px "Noto Sans JP", sans-serif'; tctx.textBaseline = 'middle';
+  // 観客席の帯
+  tctx.fillStyle = css('--crowd'); tctx.fillRect(L, Y(28), w - L - R, Y(SC.crowdZ0) - Y(28));
+  tctx.fillStyle = bad; tctx.textAlign = 'left'; tctx.fillText('観客席', L + 6, (Y(28) + Y(SC.crowdZ0)) / 2);
+  tctx.strokeStyle = line; tctx.lineWidth = 1;
+  for (const m of [8, 10, 12, 15, 20, 25, 30]) { tctx.beginPath(); tctx.moveTo(L, Y(m)); tctx.lineTo(w - R, Y(m)); tctx.stroke(); tctx.fillStyle = muted; tctx.textAlign = 'right'; tctx.fillText(`${m}`, L - 6, Y(m)); }
+  if (cfg.gGate) { tctx.strokeStyle = acc; tctx.setLineDash([6, 4]); tctx.lineWidth = 1.5; tctx.beginPath(); tctx.moveTo(L, Y(cfg.gateM)); tctx.lineTo(w - R, Y(cfg.gateM)); tctx.stroke(); tctx.setLineDash([]); }
+  const hs = sim.hist;
+  const plot = (arr, col, lw, fn) => { tctx.strokeStyle = col; tctx.lineWidth = lw; tctx.beginPath(); let pen = false; for (let i = 0; i < arr.length; i++) { const v = fn(arr[i], i); if (v === null) { pen = false; continue; } if (!pen) { tctx.moveTo(X(i), Y(v)); pen = true; } else tctx.lineTo(X(i), Y(v)); } tctx.stroke(); };
+  plot(hs.p1Z, css('--subj'), 2, (z, i) => hs.p1Ok[i] ? z : null);
+  tctx.setLineDash([2, 3]); plot(hs.p1Z, css('--subj'), 1, (z, i) => !hs.p1Ok[i] ? z : null); tctx.setLineDash([]);
+  plot(hs.lens, css('--focus'), 2.2, d => 1 / d);
+  const rows = [['選択', i => !hs.cur[i] ? null : hs.curKind[i] === 'fan' ? bad : hs.cur[i] === 'P1' ? acc : warn], ['ピント', i => hs.lensCrowd[i] ? bad : hs.hold[i] ? sunk : hs.focusP1[i] ? acc : warn]];
+  rows.forEach(([nm, fn], r) => {
+    const y0 = T + PH + 14 + r * (SH + G);
+    tctx.fillStyle = muted; tctx.textAlign = 'right'; tctx.fillText(nm, L - 6, y0 + SH / 2);
+    tctx.fillStyle = sunk; tctx.fillRect(L, y0, w - L - R, SH);
+    let s0 = 0, col = hs.cur.length ? fn(0) : null;
+    for (let i = 1; i <= hs.cur.length; i++) { const c2 = i < hs.cur.length ? fn(i) : '__'; if (c2 !== col) { if (col) { tctx.fillStyle = col; tctx.fillRect(X(s0), y0, X(i) - X(s0) + .5, SH); } s0 = i; col = c2; } }
+  });
+  tctx.fillStyle = muted; tctx.textAlign = 'center';
+  const ty = T + PH + 14 + 2 * (SH + G) + 6;
+  for (let s = 0; s <= DUR; s += 2) tctx.fillText(`${s}s`, X(s * FPS), ty);
+  if (!sim.done) { tctx.strokeStyle = ink; tctx.lineWidth = 1; tctx.beginPath(); tctx.moveTo(X(sim.frame), T); tctx.lineTo(X(sim.frame), ty - 8); tctx.stroke(); }
+}
+function renderMap() {
+  const w = mapc.clientWidth, h = 260;
+  mctx.clearRect(0, 0, w, h);
+  const muted = css('--muted'), line = css('--line'), acc = css('--accent'), focus = css('--focus'), sunk = css('--sunk'), bad = css('--bad');
+  const zMax = 28.5, xHalf = 7.5;
+  const sc = Math.min((h - 16) / zMax, (w - 16) / (2 * xHalf));
+  const MX = X => w / 2 + X * sc, MY = Z => h - 8 - Z * sc;
+  // 画角
+  const k = (W / 2) / (SC.f * PX_PER_MM);
+  mctx.fillStyle = sunk; mctx.beginPath(); mctx.moveTo(MX(0), MY(0)); mctx.lineTo(MX(-k * zMax), MY(zMax)); mctx.lineTo(MX(k * zMax), MY(zMax)); mctx.closePath(); mctx.fill();
+  // コート
+  mctx.strokeStyle = line; mctx.lineWidth = 1; mctx.strokeRect(MX(-7), MY(19.3), 14 * sc, (19.3 - 6) * sc);
+  // 広告ボード
+  mctx.strokeStyle = muted; mctx.lineWidth = 3; mctx.beginPath(); mctx.moveTo(MX(-7.5), MY(SC.boardZ)); mctx.lineTo(MX(7.5), MY(SC.boardZ)); mctx.stroke();
+  // 観客
+  for (const st of sim.fans) {
+    const X = (st.u - .5) * W / st.s;
+    const c = sim.cands.find(x => x.id === st.id);
+    mctx.fillStyle = st.id === sim.cur ? bad : c && c.ex ? css('--c7') : c ? css('--ink') : line;
+    mctx.globalAlpha = st.id === sim.cur ? 1 : .55;
+    mctx.beginPath(); mctx.arc(MX(X), MY(st.Z), st.id === sim.cur ? 4 : 1.6, 0, 7); mctx.fill();
+  }
+  mctx.globalAlpha = 1;
+  // 距離ゲート
+  if (cfg.gGate) { mctx.strokeStyle = acc; mctx.setLineDash([5, 4]); mctx.lineWidth = 1.5; mctx.beginPath(); mctx.moveTo(MX(-7.5), MY(cfg.gateM)); mctx.lineTo(MX(7.5), MY(cfg.gateM)); mctx.stroke(); mctx.setLineDash([]); mctx.fillStyle = acc; mctx.font = '11px "Noto Sans JP", sans-serif'; mctx.textAlign = 'left'; mctx.textBaseline = 'bottom'; mctx.fillText(`ゲート ${cfg.gateM} m`, MX(-7.4), MY(cfg.gateM) - 2); }
+  // ピント面
+  const fz = 1 / sim.lensD;
+  mctx.strokeStyle = focus; mctx.lineWidth = 2; mctx.beginPath(); mctx.moveTo(MX(-k * fz), MY(fz)); mctx.lineTo(MX(k * fz), MY(fz)); mctx.stroke();
+  // 選手
+  for (const st of sim.players) {
+    const X = (st.u - .5) * W / st.s;
+    mctx.fillStyle = colOf(st.id); mctx.beginPath(); mctx.arc(MX(X), MY(st.Z), 5, 0, 7); mctx.fill();
+    if (st.id === sim.cur) { mctx.strokeStyle = css('--ink'); mctx.lineWidth = 2; mctx.beginPath(); mctx.arc(MX(X), MY(st.Z), 8, 0, 7); mctx.stroke(); }
+    mctx.fillStyle = css('--ink'); mctx.font = '600 11px "Barlow Semi Condensed", sans-serif'; mctx.textAlign = 'left'; mctx.textBaseline = 'middle'; mctx.fillText(st.id, MX(X) + 8, MY(st.Z));
+  }
+  mctx.fillStyle = muted; mctx.beginPath(); mctx.arc(MX(0), MY(0) - 2, 4, 0, 7); mctx.fill();
+}
+
+function renderStats() {
+  const m = metrics(sim);
+  const pct = v => isNaN(v) ? '—' : `${Math.round(v * 100)}%`;
+  const sf = $('sFan'); sf.textContent = pct(m.fan); sf.className = m.fan > 0 ? 'bad' : 'ok';
+  const sl = $('sLens'); sl.textContent = pct(m.lensCrowd); sl.className = m.lensCrowd > 0 ? 'bad' : 'ok';
+  $('sMatch').textContent = pct(m.match); $('sFocus').textContent = pct(m.focus);
+  const st = sim.status || {}, chip = $('statusChip');
+  if (sim.done) { chip.className = 'chip'; chip.textContent = '終了'; }
+  else if (st.fan) { chip.className = 'chip bad'; chip.textContent = '観客にピントが飛んでいる'; }
+  else if (sim.lostN > 0) { chip.className = 'chip'; chip.textContent = '見失ってピントを保持'; }
+  else if (st.match && st.inFocus) { chip.className = 'chip ok'; chip.textContent = 'P1 に合焦'; }
+  else if (st.match) { chip.className = 'chip warn'; chip.textContent = 'P1 へピント移動中'; }
+  else { chip.className = 'chip warn'; chip.textContent = '別の選手を追っている'; }
+}
+function renderLog() {
+  const ol = $('log');
+  if (logShown > sim.log.length) { ol.innerHTML = ''; logShown = 0; }
+  for (; logShown < sim.log.length; logShown++) {
+    const e = sim.log[logShown];
+    const li = document.createElement('li'); li.className = 'k-' + e.kind;
+    li.innerHTML = '<b></b><span></span>'; li.querySelector('b').textContent = e.t.toFixed(2); li.querySelector('span').textContent = e.msg;
+    ol.appendChild(li);
+  }
+  ol.scrollTop = ol.scrollHeight;
+}
+function renderAll(full) {
+  render();
+  if (full || sim.frame - lastScoreF >= 6 || sim.frame < lastScoreF || sim.done) { renderScores(); lastScoreF = sim.frame; }
+  if (full || sim.frame - lastChartF >= 3 || sim.frame < lastChartF || sim.done) { renderChart(); renderMap(); renderStats(); lastChartF = sim.frame; }
+  renderLog();
+}
+
+// ——— 操作
+function restart() {
+  sim = makeSim(cfg, 9001);
+  logShown = 0; $('log').innerHTML = ''; lastScoreF = lastChartF = -99;
+  stepSim(sim);
+  renderAll(true);
+  if (!playing) { $('play').textContent = '再生'; }
+}
+function updateGuardUI() {
+  $('gGate').checked = cfg.gGate; $('gCrowd').checked = cfg.gCrowd; $('gLocal').checked = cfg.gLocal;
+  const n = [cfg.gGate, cfg.gCrowd, cfg.gLocal].filter(Boolean).length;
+  $('guardSummary').textContent = n === 3 ? 'すべてオン：どの方式でも観客は選ばれません' : n === 0 ? 'すべてオフ' : `${n} つオン`;
+  $('gateOut').textContent = `${cfg.gateM} m`;
+  markCmp();
+}
+function updateFno() {
+  const f = FNOS[cfg.fnoIdx];
+  $('fnoOut').textContent = `f/${f}`;
+  const b = blurPx(f, 24, 1 / 12);
+  $('fnoHint').textContent = `85mm。12 m の選手に合わせたとき、24 m の観客のボケは直径 ${b.toFixed(1)} 画素。開けるほど観客はボケますが、f/1.4 でも瞳は検出できます。`;
+}
+function updateSens() { const s = sens(cfg); $('sensOut').textContent = String(cfg.sens); $('sensHint').textContent = `マージン ${s.margin.toFixed(2)}・確認 ${s.confirm} コマ・見失い待ち ${s.hold} コマ`; }
+function setPreset(k) {
+  cfg.preset = k;
+  if (k !== 'custom') cfg.custom = { ...PRESETS[k].w };
+  for (const [fk] of FEATS) { $('w_' + fk).value = cfg.custom[fk]; $('wo_' + fk).textContent = cfg.custom[fk].toFixed(2); }
+  $('presetDesc').textContent = PRESETS[k].desc;
+  $('p_' + k).checked = true;
+  markCmp();
+}
+function buildUI() {
+  $('presetSeg').innerHTML = PRESET_ORDER.concat('custom').map(k => `<input type="radio" name="preset" id="p_${k}" value="${k}"><label for="p_${k}">${PRESETS[k].name}</label>`).join('');
+  $('weights').innerHTML = FEATS.map(([k, n]) => `<div class="ctrl"><div class="row"><label for="w_${k}">${n}</label><output id="wo_${k}"></output></div><input type="range" id="w_${k}" min="0" max="2.5" step="0.05" value="0"></div>`).join('');
+  $('presetSeg').addEventListener('change', e => { setPreset(e.target.value); restart(); });
+  for (const [k] of FEATS) $('w_' + k).addEventListener('input', e => {
+    cfg.custom[k] = +e.target.value; $('wo_' + k).textContent = cfg.custom[k].toFixed(2);
+    if (cfg.preset !== 'custom') { cfg.preset = 'custom'; $('p_custom').checked = true; $('presetDesc').textContent = PRESETS.custom.desc; markCmp(); }
+    restart();
+  });
+  for (const [id, key] of [['gGate', 'gGate'], ['gCrowd', 'gCrowd'], ['gLocal', 'gLocal']]) $(id).addEventListener('change', e => { cfg[key] = e.target.checked; updateGuardUI(); restart(); });
+  $('gateM').addEventListener('input', e => { cfg.gateM = +e.target.value; updateGuardUI(); restart(); });
+  $('allOn').addEventListener('click', () => { cfg.gGate = cfg.gCrowd = cfg.gLocal = true; updateGuardUI(); restart(); });
+  $('allOff').addEventListener('click', () => { cfg.gGate = cfg.gCrowd = cfg.gLocal = false; updateGuardUI(); restart(); });
+  $('sens').addEventListener('input', e => { cfg.sens = +e.target.value; updateSens(); restart(); });
+  $('fno').addEventListener('input', e => { cfg.fnoIdx = +e.target.value; updateFno(); restart(); });
+  $('play').addEventListener('click', () => {
+    if (sim.done) { playing = true; restart(); } else playing = !playing;
+    $('play').textContent = playing ? '一時停止' : '再生';
+  });
+  $('restart').addEventListener('click', restart);
+  $('stepbtn').addEventListener('click', () => { playing = false; $('play').textContent = '再生'; if (!sim.done) { stepSim(sim); renderAll(true); } });
+  document.querySelectorAll('input[name=rate]').forEach(r => r.addEventListener('change', e => { rate = +e.target.value; }));
+  for (const id of ['showCands', 'showFans', 'showEye']) $(id).addEventListener('change', () => render());
+  $('cmpBtn').addEventListener('click', runCompare);
+  window.addEventListener('resize', () => { sizeCanvases(); renderChart(); renderMap(); });
+  const mq = window.matchMedia('(prefers-color-scheme: dark)');
+  if (mq.addEventListener) mq.addEventListener('change', () => renderAll(true));
+}
+
+const CMP_COLS = [
+  ['対策なし', { gGate: false, gCrowd: false, gLocal: false }],
+  ['① 距離ゲートだけ', { gGate: true, gCrowd: false, gLocal: false }],
+  ['② 観客判定だけ', { gGate: false, gCrowd: true, gLocal: false }],
+  ['③ 周辺探索だけ', { gGate: false, gCrowd: false, gLocal: true }],
+  ['すべて', { gGate: true, gCrowd: true, gLocal: true }]
+];
+let cmpData = null, cmpBusy = false;
+function runCompare() {
+  if (cmpBusy) return;
+  cmpBusy = true;
+  const btn = $('cmpBtn'); btn.disabled = true; btn.textContent = '計算中…';
+  const jobs = [];
+  PRESET_ORDER.forEach((p, i) => CMP_COLS.forEach(([, g], j) => jobs.push([i, j, p, g])));
+  cmpData = PRESET_ORDER.map(() => CMP_COLS.map(() => null));
+  let k = 0;
+  // まず Web Worker で計算（画面を止めない）。使えなければ少しずつ計算する
+  try {
+    const src = document.getElementById('core').textContent + `
+onmessage = e => { const { jobs, base } = e.data; for (let k = 0; k < jobs.length; k++) { const [i, j, p, g] = jobs[k]; postMessage({ i, j, m: runAll({ ...base, ...g, preset: p }), k: k + 1 }); } };`;
+    const wk = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+    const base = { preset: cfg.preset, custom: { ...cfg.custom }, sens: cfg.sens, fnoIdx: cfg.fnoIdx, af: { ...cfg.af }, gateM: cfg.gateM };
+    wk.onmessage = e => {
+      const { i, j, m, k: done } = e.data;
+      cmpData[i][j] = m;
+      $('cmpProg').textContent = done < jobs.length ? `${done} / ${jobs.length}` : '';
+      renderCmp();
+      if (done === jobs.length) { wk.terminate(); cmpBusy = false; btn.disabled = false; btn.textContent = '再計算'; }
+    };
+    wk.onerror = () => { wk.terminate(); tick(); };
+    wk.postMessage({ jobs, base });
+    return;
+  } catch (e) { /* 下の方法で計算 */ }
+  function tick() {
+    const t0 = performance.now();
+    while (k < jobs.length && performance.now() - t0 < 40) {
+      const [i, j, p, g] = jobs[k++];
+      cmpData[i][j] = runAll({ ...cfg, ...g, preset: p, custom: { ...cfg.custom } });
+    }
+    $('cmpProg').textContent = k < jobs.length ? `${k} / ${jobs.length}` : '';
+    renderCmp();
+    if (k < jobs.length) setTimeout(tick, 0);
+    else { cmpBusy = false; btn.disabled = false; btn.textContent = '再計算'; }
+  }
+  tick();
+}
+function renderCmp() {
+  const tbl = $('cmpTbl');
+  tbl.tHead.innerHTML = '<tr><th style="text-align:left">方式</th>' + CMP_COLS.map(([n]) => `<th>${n}</th>`).join('') + '</tr>';
+  tbl.tBodies[0].innerHTML = PRESET_ORDER.map((p, i) => `<tr><td class="sc">${PRESETS[p].name}</td>` + CMP_COLS.map(([, g], j) => {
+    const m = cmpData[i][j];
+    if (!m) return `<td class="cell" data-p="${p}" data-j="${j}">…</td>`;
+    return `<td class="cell" data-p="${p}" data-j="${j}"><b class="${m.fan > 0 ? 'bad' : 'ok'}">${(m.fan * 100).toFixed(m.fan > 0 && m.fan < .01 ? 1 : 0)}%</b><small>P1 合焦 ${Math.round(m.focus * 100)}%</small></td>`;
+  }).join('') + '</tr>').join('');
+  markCmp();
+}
+function markCmp() {
+  const j = CMP_COLS.findIndex(([, g]) => g.gGate === cfg.gGate && g.gCrowd === cfg.gCrowd && g.gLocal === cfg.gLocal);
+  document.querySelectorAll('#cmpTbl td.cell').forEach(td => td.classList.toggle('cur', td.dataset.p === cfg.preset && +td.dataset.j === j));
+}
+
+function loop(ts) {
+  if (lastTs === null) lastTs = ts;
+  const dt = Math.min(.1, (ts - lastTs) / 1000); lastTs = ts;
+  if (playing && !sim.done) {
+    acc += dt * rate; let n = 0;
+    while (acc >= DT && n < 6 && !sim.done) { stepSim(sim); acc -= DT; n++; }
+    if (n) renderAll(false);
+    if (sim.done) { renderAll(true); $('play').textContent = 'もう一度'; }
+  } else acc = 0;
+  requestAnimationFrame(loop);
+}
+
+buildUI();
+sizeCanvases();
+buildBg();
+updateSens(); updateFno(); updateGuardUI();
+setPreset('eye');
+if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) playing = false;
+restart();
+runCompare();
+requestAnimationFrame(loop);
+window.__crowd = { cfg, runAll, get sim() { return sim; } };
+</script>
+
+</body></html>
