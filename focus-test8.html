@@ -1,0 +1,1775 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>シーン判別AFラボ</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;600&family=Noto+Sans+JP:wght@400;500;700&display=swap">
+<style>
+/* レイアウト：左がファインダー・距離グラフ・スコア、右が場面と「シーン判別」を先頭にした設定パネル。下に比較実験と解説 */
+:root {
+  --bg: #eef2f0;
+  --panel: #ffffff;
+  --sunk: #e3e9e6;
+  --ink: #18211e;
+  --muted: #5a6863;
+  --line: #d2dbd7;
+  --accent: #17834a;
+  --accent-soft: rgba(23,131,74,.14);
+  --warn: #b86400;
+  --bad: #c3302a;
+  --bad-soft: rgba(195,48,42,.12);
+  --subj: #2a66d6;
+  --focus: #d07a06;
+  --crowd: rgba(195,48,42,.13);
+  --c1: #3b6fd8; --c2: #d9822b; --c3: #8a5cc7; --c4: #1f9aa0; --c5: #d0507a; --c6: #7d8a2a; --c7: #8a8f8d;
+  --font-display: "Barlow Semi Condensed", "Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif;
+  --font-body: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", "Meiryo", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101514; --panel: #18201e; --sunk: #222b29; --ink: #e2eae6; --muted: #91a09a; --line: #2c3734;
+    --accent: #3fcd7c; --accent-soft: rgba(63,205,124,.16); --warn: #f0a23a; --bad: #ff6a5c; --bad-soft: rgba(255,106,92,.14);
+    --subj: #74a2ff; --focus: #f3a53c; --crowd: rgba(255,106,92,.14);
+    --c1: #7aa2ff; --c2: #f2a35a; --c3: #b994ee; --c4: #4fc6cc; --c5: #f07fa3; --c6: #b4c24e; --c7: #a3aaa7;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101514; --panel: #18201e; --sunk: #222b29; --ink: #e2eae6; --muted: #91a09a; --line: #2c3734;
+  --accent: #3fcd7c; --accent-soft: rgba(63,205,124,.16); --warn: #f0a23a; --bad: #ff6a5c; --bad-soft: rgba(255,106,92,.14);
+  --subj: #74a2ff; --focus: #f3a53c; --crowd: rgba(255,106,92,.14);
+  --c1: #7aa2ff; --c2: #f2a35a; --c3: #b994ee; --c4: #4fc6cc; --c5: #f07fa3; --c6: #b4c24e; --c7: #a3aaa7;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 14px; line-height: 1.65;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 40px;
+}
+.wrap { max-width: 1260px; margin: 0 auto; display: grid; gap: 18px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 20px; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(25px, 6vw, 30px); letter-spacing: .01em; margin: 0; text-wrap: balance; }
+h1 small { font-family: var(--font-mono); font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 10px; letter-spacing: .08em; }
+@media (max-width: 520px) { h1 small { display: block; margin-left: 0; } }
+header p { margin: 0; color: var(--muted); max-width: 64ch; }
+h2 { font-family: var(--font-display); font-weight: 600; font-size: 19px; margin: 0; letter-spacing: .02em; text-wrap: balance; }
+h3 { font-family: var(--font-display); font-weight: 600; font-size: 16.5px; margin: 10px 0 0; letter-spacing: .02em; }
+.label { font-family: var(--font-display); font-weight: 600; font-size: 12.5px; letter-spacing: .1em; color: var(--muted); }
+
+.main { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 920px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.col { display: grid; gap: 14px; min-width: 0; }
+
+.vf { position: relative; background: #0b0d0c; border-radius: 10px; overflow: hidden; }
+.vf canvas { display: block; width: 100%; height: auto; }
+.transport { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+button, .seg label {
+  font-family: var(--font-display); font-weight: 600; font-size: 14px; letter-spacing: .03em;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 7px;
+  padding: 6px 12px; cursor: pointer; line-height: 1.3;
+}
+button:hover, .seg label:hover { border-color: var(--muted); }
+button:disabled { opacity: .6; cursor: progress; }
+button:focus-visible, .seg input:focus-visible + label, input[type=range]:focus-visible, input[type=checkbox]:focus-visible, .switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; min-width: 88px; }
+:root[data-theme="dark"] button.primary { color: #0c1410; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) button.primary { color: #0c1410; } }
+.transport .spacer { flex: 1; }
+.chip { font-family: var(--font-display); font-weight: 600; font-size: 13px; padding: 3px 10px; border-radius: 99px; background: var(--sunk); color: var(--muted); letter-spacing: .04em; white-space: nowrap; }
+.chip.ok { background: var(--accent-soft); color: var(--accent); }
+.chip.warn { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.chip.bad { background: var(--bad-soft); color: var(--bad); }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 10px; min-width: 0; }
+.card.guard { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.cardhead { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.chart canvas, .mapc canvas { display: block; width: 100%; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--muted); }
+.legend i { display: inline-block; width: 14px; height: 10px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+.legend i.ln { height: 3px; }
+
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 520px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.stat { display: grid; gap: 2px; }
+.stat b { font-family: var(--font-mono); font-weight: 600; font-size: 21px; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.stat b.bad { color: var(--bad); }
+.stat b.ok { color: var(--accent); }
+.stat span { font-size: 12px; color: var(--muted); }
+
+.ctrl { display: grid; gap: 2px; }
+.ctrl .row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.ctrl output { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.ctrl .hint { font-size: 12px; color: var(--muted); line-height: 1.45; }
+input[type=range] { width: 100%; accent-color: var(--accent); margin: 2px 0; }
+.ticks { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); margin-top: -2px; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label { font-size: 13.5px; padding: 5px 10px; }
+.seg input:checked + label { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.desc { font-size: 13px; color: var(--muted); margin: 0; }
+.checks { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); }
+.checks label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.checks input { accent-color: var(--accent); }
+.weights { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 16px; }
+@media (max-width: 400px) { .weights { grid-template-columns: minmax(0, 1fr); } }
+.weights .ctrl label { font-size: 13px; }
+details > summary { cursor: pointer; font-family: var(--font-display); font-weight: 600; font-size: 12.5px; letter-spacing: .1em; color: var(--muted); }
+details[open] > summary { margin-bottom: 8px; }
+
+.guardlist { display: grid; gap: 12px; }
+.gitem { display: grid; gap: 4px; }
+.switch { display: flex; align-items: center; gap: 10px; cursor: pointer; font-weight: 700; }
+.switch input { position: absolute; opacity: 0; }
+.switch span.t { width: 38px; height: 22px; border-radius: 99px; background: var(--sunk); border: 1px solid var(--line); position: relative; flex: none; transition: background .15s; }
+.switch span.t::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--muted); transition: transform .15s, background .15s; }
+.switch input:checked + span.t { background: var(--accent-soft); border-color: var(--accent); }
+.switch input:checked + span.t::after { transform: translateX(16px); background: var(--accent); }
+.gitem p { margin: 0 0 0 48px; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+.gitem .ctrl { margin-left: 48px; }
+.guardbtns { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.log { font-family: var(--font-mono); font-size: 12px; max-height: 190px; overflow-y: auto; display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.log li { display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 8px; color: var(--muted); }
+.log li b { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.log li.k-bad span { color: var(--bad); }
+.log li.k-warn span { color: var(--warn); }
+.log li.k-ok span { color: var(--accent); }
+.log span { font-family: var(--font-body); }
+
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 6px; text-align: center; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+th { font-family: var(--font-display); font-weight: 600; color: var(--muted); letter-spacing: .03em; white-space: nowrap; }
+#scoreTbl { min-width: 780px; }
+#scoreTbl td { font-family: var(--font-mono); font-size: 12px; }
+#scoreTbl td.f { background: color-mix(in srgb, var(--accent) calc(var(--v) * 30%), transparent); }
+#scoreTbl th.off, #scoreTbl td.off { opacity: .35; }
+#scoreTbl td.name { text-align: left; font-family: var(--font-display); font-weight: 600; font-size: 13.5px; white-space: nowrap; }
+#scoreTbl td.name i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+#scoreTbl td.tot { text-align: left; min-width: 70px; }
+#scoreTbl td.tot .bar { height: 6px; border-radius: 3px; margin-top: 2px; }
+#scoreTbl td.judge { text-align: left; font-family: var(--font-body); font-size: 12px; white-space: nowrap; }
+#scoreTbl tr.sel td { background-color: var(--accent-soft); }
+#scoreTbl tr.sel.fan td { background-color: var(--bad-soft); }
+#scoreTbl tr.ex td:not(.judge):not(.name) { opacity: .4; text-decoration: line-through; }
+#scoreTbl tr.miss td { color: var(--muted); }
+#scoreTbl tr.sum td { text-align: left; font-family: var(--font-body); color: var(--muted); }
+.tag { font-family: var(--font-display); font-size: 11.5px; font-weight: 600; padding: 0 6px; border-radius: 99px; margin-left: 6px; letter-spacing: .03em; }
+.tag.sel { background: var(--accent); color: var(--panel); }
+.tag.pend { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+.tag.ideal { background: var(--sunk); color: var(--ink); }
+.ex-gate { color: var(--accent); }
+.ex-crowd { color: var(--accent); }
+.fanword { color: var(--bad); }
+#cmpTbl { min-width: 760px; }
+#ablTbl { min-width: 420px; max-width: 640px; }
+#ablTbl td.cell b.ok { color: var(--accent); } #ablTbl td.cell b.bad { color: var(--bad); }
+#ablTbl td.cell { font-family: var(--font-mono); } #ablTbl td.cell small { display: block; font-size: 11px; color: var(--muted); }
+#ablTbl td.sc { text-align: left; font-family: var(--font-display); font-weight: 600; font-size: 13px; }
+#cmpTbl td.cell { font-family: var(--font-mono); }
+#cmpTbl td.cell b { font-weight: 600; }
+#cmpTbl td.cell b.bad { color: var(--bad); }
+#cmpTbl td.cell b.ok { color: var(--accent); }
+#cmpTbl td.cell small { display: block; font-size: 11px; color: var(--muted); }
+#cmpTbl td.cur { outline: 2px solid var(--accent); outline-offset: -2px; }
+#cmpTbl td.sc { text-align: left; font-family: var(--font-display); font-weight: 600; font-size: 13px; white-space: nowrap; }
+.note { font-size: 12.5px; color: var(--muted); margin: 0; }
+.progress { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+
+.lower { display: grid; gap: 18px; }
+.algo p, .algo li { max-width: 78ch; }
+.algo ul, .algo ol { margin: 0; padding-left: 1.3em; display: grid; gap: 4px; }
+.algo p { margin: 0; }
+.formula { font-family: var(--font-mono); font-size: 12.5px; background: var(--sunk); border-radius: 8px; padding: 10px 12px; white-space: pre-wrap; overflow-x: auto; line-height: 1.6; }
+.flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; }
+.flow .box { background: var(--sunk); border-radius: 6px; padding: 4px 10px; }
+.flow .box.g { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.flow .arr { color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .switch span.t, .switch span.t::after { transition: none; } }
+
+.vf canvas { cursor: crosshair; touch-action: manipulation; }
+.bars { display: grid; gap: 6px; }
+.barrow { display: grid; grid-template-columns: 7.5em minmax(0, 1fr) 3em; align-items: center; gap: 8px; font-size: 13px; }
+.barrow span small { color: var(--muted); font-size: 11px; margin-left: 2px; }
+.barrow .track { height: 10px; border-radius: 5px; background: var(--sunk); overflow: hidden; }
+.barrow .track div { height: 100%; border-radius: 5px; }
+.barrow b { font-family: var(--font-mono); font-weight: 600; font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; }
+.barrow.on span { font-weight: 700; }
+.featgrid { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; font-size: 12px; color: var(--muted); }
+.featgrid b { font-family: var(--font-mono); font-weight: 500; color: var(--ink); text-align: right; }
+.rulebox { background: var(--sunk); border-radius: 8px; padding: 8px 10px; display: grid; gap: 2px; }
+.rulebox p { margin: 0; font-size: 13px; }
+table.plain { min-width: 620px; }
+table.plain td { text-align: left; vertical-align: top; font-size: 12.5px; }
+table.plain td:first-child { white-space: nowrap; font-weight: 700; }
+#cueTbl { min-width: 520px; }
+#cueTbl td.cell { font-family: var(--font-mono); } #cueTbl td.cell small { display: block; font-size: 11px; color: var(--muted); }
+#cueTbl td.cell b.ok { color: var(--accent); } #cueTbl td.cell b.bad { color: var(--bad); }
+#cueTbl td.sc { text-align: left; font-family: var(--font-display); font-weight: 600; font-size: 13px; }
+</style>
+<div class="wrap">
+  <header>
+    <h1>シーン判別AFラボ <small>SCENE-AWARE AF · 60 Hz SIM</small></h1>
+    <p>選手と審判・観客を見分けるには、まず「何の競技か」を知る必要があります。カメラが画面の色・線・人の動き方・姿勢から競技を判別し、その競技のルールで追う相手を自動で決める様子を、100m 走・競泳・サッカー・相撲の 4 つの場面で確かめる実験台です。</p>
+  </header>
+
+  <div class="main">
+    <div class="col">
+      <div class="vf"><canvas id="vf" width="800" height="450" aria-label="シミュレーションのファインダー画面。クリックでAF点を移動"></canvas></div>
+      <div class="transport">
+        <button id="play" class="primary">一時停止</button>
+        <button id="restart">最初から</button>
+        <button id="stepbtn">1コマ送り</button>
+        <div class="seg" role="radiogroup" aria-label="再生速度">
+          <input type="radio" name="rate" id="r025" value="0.25"><label for="r025">0.25×</label>
+          <input type="radio" name="rate" id="r05" value="0.5"><label for="r05">0.5×</label>
+          <input type="radio" name="rate" id="r1" value="1" checked><label for="r1">1×</label>
+        </div>
+        <span class="spacer"></span>
+        <span id="statusChip" class="chip">—</span>
+      </div>
+      <div class="checks">
+        <label><input type="checkbox" id="showCands" checked>人物の枠とスコア</label>
+        <label><input type="checkbox" id="showFans" checked>観客の検出結果</label>
+        <span>画面をクリックすると AF 点が動き、その下の選手から追い始めます</span>
+      </div>
+
+      <div class="card chart">
+        <div class="cardhead"><h2>ピント位置の推移</h2><span class="label" id="tlLabel">対数目盛 · m · 0〜14 秒</span></div>
+        <canvas id="tl" height="290" aria-label="選手と審判の距離、レンズのピント位置、判別結果の推移"></canvas>
+        <div class="legend">
+          <span><i class="ln" style="background:var(--c1)"></i>選手（細い線、色は人ごと）</span>
+          <span><i class="ln" style="background:var(--bad)"></i>審判（点線）</span>
+          <span><i class="ln" style="background:var(--focus)"></i>レンズのピント位置</span>
+        </div>
+        <div class="legend">
+          <span><i style="background:var(--accent)"></i>選手を選び、合焦</span>
+          <span><i style="background:var(--warn)"></i>選手を選んだがピントが外れている</span>
+          <span><i style="background:var(--bad)"></i>審判・観客を選んでいる</span>
+          <span><i style="background:var(--sunk)"></i>選んでいない（判別中・見失い）</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="stats">
+          <div class="stat"><b id="sFocus">—</b><span>選手を選んで合焦していた割合（選手が見えている間）</span></div>
+          <div class="stat"><b id="sOff">—</b><span>審判を選んでいた時間</span></div>
+          <div class="stat"><b id="sFan">—</b><span>観客・待機中の人を選んでいた時間</span></div>
+          <div class="stat"><b id="sCls">—</b><span id="sClsSub">シーン判別</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="cardhead"><h2>スコアの内訳</h2><span class="label" id="scoreState">—</span></div>
+        <div class="tablewrap"><table id="scoreTbl"><thead></thead><tbody></tbody></table></div>
+        <p class="note">選手と審判、スコアの高い観客 3 人を表示。取り消し線は、いま使っている競技ルールで候補から外されたもの。右端はカメラが推定した立ち位置（横・奥行き・頭の高さ）と速さ、除外の理由です。</p>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card">
+        <span class="label">場面（どの競技を撮っているか）</span>
+        <div class="seg" id="sceneSeg" role="radiogroup" aria-label="場面"></div>
+        <p class="desc" id="sceneDesc"></p>
+      </div>
+
+      <div class="card guard">
+        <div class="cardhead"><span class="label">シーン判別</span><span class="note" id="clsState">—</span></div>
+        <div id="clsBars" class="bars"></div>
+        <div class="checks" aria-label="判別に使う手がかり">
+          <label><input type="checkbox" id="cueColor" checked>色</label>
+          <label><input type="checkbox" id="cueLines" checked>線</label>
+          <label><input type="checkbox" id="cueMotion" checked>動き方</label>
+          <label><input type="checkbox" id="cuePose" checked>姿勢・組み合い</label>
+        </div>
+        <div id="clsFeat" class="featgrid"></div>
+      </div>
+
+      <div class="card">
+        <span class="label">追う相手の決め方</span>
+        <div class="seg" id="modeSeg" role="radiogroup" aria-label="決め方"></div>
+        <p class="desc" id="modeDesc"></p>
+        <span class="label">100m 走と競泳で追う相手</span>
+        <div class="seg" id="followSeg" role="radiogroup" aria-label="追う相手">
+          <input type="radio" name="follow" id="f_af" value="af" checked><label for="f_af">AF 点の選手</label>
+          <input type="radio" name="follow" id="f_lead" value="lead"><label for="f_lead">先頭の選手</label>
+        </div>
+        <div class="rulebox"><span class="label">いま使っているルール</span><p id="ruleText"></p></div>
+      </div>
+
+      <div class="card">
+        <span class="label">レンズ</span>
+        <div class="ctrl">
+          <div class="row"><label for="fno">絞り（F値）</label><output id="fnoOut"></output></div>
+          <input type="range" id="fno" min="0" max="7" step="1" value="3">
+          <div class="hint" id="fnoHint"></div>
+        </div>
+      </div>
+
+      <div class="card mapc">
+        <div class="cardhead"><span class="label">上から見た配置</span><span class="note">下がカメラ</span></div>
+        <canvas id="map" height="300" aria-label="場面を上から見た図"></canvas>
+        <div class="legend">
+          <span><i style="background:var(--c1)"></i>選手</span>
+          <span><i style="background:var(--bad)"></i>審判</span>
+          <span><i style="background:var(--c7)"></i>観客</span>
+          <span><i class="ln" style="background:var(--focus)"></i>ピント面</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <span class="label">出来事</span>
+        <ol class="log" id="log"></ol>
+      </div>
+    </div>
+  </div>
+
+  <div class="lower">
+    <div class="card">
+      <div class="cardhead">
+        <h2>比較実験</h2>
+        <button id="cmpBtn">計算する</button>
+      </div>
+      <p class="note">4 つの場面を、決め方ごとに 14 秒走らせます。大きい数字は選手を選んで合焦していた割合、小さい数字は審判・観客を選んでいた時間です。「固定」は判別を使わず、その競技のルールを最初から当てはめたもの。違う競技のルールを当てはめると何が起きるかが分かります。</p>
+      <div class="tablewrap"><table id="cmpTbl"><thead></thead><tbody></tbody></table></div>
+      <h3>判別に使う手がかりを減らすと</h3>
+      <p class="note">「自動判別」で、使う手がかりを限ったときの判別結果と、確定までの時間。赤は誤判別です。</p>
+      <div class="tablewrap"><table id="cueTbl"><thead></thead><tbody></tbody></table></div>
+      <span class="progress" id="cmpProg"></span>
+    </div>
+
+    <div class="card algo" id="algo">
+      <h2>しくみ</h2>
+      <div class="flow" aria-label="処理の流れ">
+        <span class="box">① 人物の検出</span><span class="arr">→</span>
+        <span class="box g">② シーン判別（色・線・動き・姿勢）</span><span class="arr">→</span>
+        <span class="box g">③ 競技ルールで選手以外を除外</span><span class="arr">→</span>
+        <span class="box g">④ 競技ルールで追う相手を決める</span><span class="arr">→</span>
+        <span class="box">⑤ 位相差AF・レンズ</span>
+      </div>
+      <p>前回までの対策（距離ゲート、観客の判定、行司の判定）は、どれも「その競技ならこうなっているはず」という知識を使っていました。100m 走では止まっている人は選手ではなく、競泳では立っている人は選手ではなく、サッカーではひとりだけ色の違う人は選手ではありません。同じ知識をほかの競技に当てはめると、かえって間違えます。そこで、まず競技を判別してから、その競技用のルールを選ぶようにしました。</p>
+
+      <h3>② シーン判別</h3>
+      <p>4 種類の手がかりを毎コマ計算し、競技ごとの「典型的な値」との近さを点数にします。点数は過去にさかのぼるほど弱めて足し合わせ（1 コマごとに 0.92 倍）、ソフトマックスで確率にします。0.2 秒以上たって、いちばん高い確率が 85% を超えたら確定します。確定後も、別の競技が 95% を 0.5 秒超え続けたら判別を変えます。</p>
+      <div class="tablewrap">
+        <table class="plain">
+          <thead><tr><th>手がかり</th><th>中身</th><th>100m 走</th><th>競泳</th><th>サッカー</th><th>相撲</th></tr></thead>
+          <tbody>
+            <tr><td>色</td><td>画面下半分の色の割合（赤茶・青・緑・砂色ほか）</td><td>赤茶 7 割</td><td>青 8 割</td><td>緑 8 割</td><td>砂色・暗い</td></tr>
+            <tr><td>線</td><td>直線の向きと形（奥へ収束する平行線・横の平行線・まばらな白線・円）</td><td>奥へ収束</td><td>横の平行線</td><td>まばらな白線</td><td>円（俵）</td></tr>
+            <tr><td>動き方</td><td>動いている人の速さのうち奥行き方向の割合と、左右の向きのそろい方。ジャイロでカメラの振りを差し引いて測る</td><td>奥行き 9 割</td><td>左右・そろう</td><td>ばらばら</td><td>小さい</td></tr>
+            <tr><td>姿勢・組み合い</td><td>頭の大きさに対して体が短い（水面から上しか見えない）人の割合、0.9 m 以内に別の人がいる動く人の割合</td><td>—</td><td>体が短い</td><td>—</td><td>組み合う</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>実際のカメラなら、画面全体を入力にしたシーン分類のニューラルネットで判別するはずです。このシミュレーションでは、色と線の割合は場面ごとに決めた値にノイズを足したものを使い、動き方と姿勢は検出した人物から実際に計算しています。</p>
+
+      <h3>③④ 競技ごとのルール</h3>
+      <div class="tablewrap">
+        <table class="plain">
+          <thead><tr><th>競技</th><th>選手とみなす条件</th><th>追う相手</th><th>外れる人</th></tr></thead>
+          <tbody>
+            <tr><td>100m 走</td><td>秒速 2 m 以上でカメラへ近づいている（直近 1.5 秒以内に）。レーンの中（横 ±5.2 m）</td><td>AF 点の選手（設定で「先頭の選手」にも切り替えられる。その場合は 1 m 以上前に出た選手が 0.25 秒続けば乗り換え）</td><td>ゴール審判、旗の審判、待機中の選手、観客</td></tr>
+            <tr><td>競泳</td><td>プールの中（7.9〜23.9 m）で、頭頂が水面から 0.8 m より低い</td><td>AF 点の選手（設定で「先頭の選手」にも切り替えられる）。カメラは追っている選手に合わせて振れる</td><td>プールサイドの審判、対岸の観客</td></tr>
+            <tr><td>サッカー</td><td>フィールドの中（奥行き 41 m まで）で、同じ色のユニフォームの仲間がいる。静止して密集していない</td><td>AF 点の選手を追い続ける。見失ったら 0.5 秒待って、最後の位置に近い選手へ</td><td>主審（ひとりだけ黄色）、観客</td></tr>
+            <tr><td>相撲</td><td>土俵の円の中で頭が 1.7 m より高く、力士らしさが 0.45 以上</td><td>組み合った 2 人をひとまとまりとして追う</td><td>行司、審判、観客</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>判別が終わるまでの約 0.2 秒は、あえて誰も選びません。最初の 1 コマで審判に合わせてしまうと、そこから選手へ移るまでにピントが大きく動くからです。</p>
+
+      <h3>この方式の弱点</h3>
+      <ul>
+        <li><b>判別を間違えると、ルールが逆に働く</b>：比較実験の「固定」の列が、その場合に起きることです。相撲にサッカーのルールを当てはめると、行司や審判を選手と判定してしまいます。色や線が使えない場面（逆光や夜間）では、動き方だけで判別することになり、間違えやすくなります（手がかりの表を参照）。</li>
+        <li><b>ルールの前提が崩れる瞬間がある</b>：100m 走でゴールを過ぎて止まった選手は「走っていない」ので候補から外れます。サッカーで主審と同じ色のユニフォームの選手がいる場合や、ゴールキーパー（ひとりだけ色が違う）は、色の仲間のルールでは区別できません。</li>
+        <li><b>競泳の審判は、汎用の方式でもあまり選ばれない</b>：プールに背を向けて立つ審判は瞳も動きもないので、もともとスコアが低いためです。ただし、こちらを向いた審判が大きく写ったときには、汎用の方式でも選ばれることがあります。</li>
+      </ul>
+
+      <h3>簡略化している点</h3>
+      <ul>
+        <li>検出・瞳・体の幅・肌の割合は台本の値から計算し、確率とノイズで取りこぼしと誤差を入れています。色の観測にノイズは入れていないので、ユニフォームの色の仲間分けは実際より簡単です。</li>
+        <li>競泳ではカメラが、追っている選手（選ぶ前は 2 レーン）に合わせて自動で振れます（撮影者の操作の代わり）。ほかの場面ではカメラは固定です。</li>
+        <li>メーカーの実際のシーン認識や競技別 AF の中身は公開されていません。ここで使っているのは、公開されている考え方をもとにした自作の近似で、考え方を理解するためのものです。</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script id="core">
+// CORE-BEGIN  ———— シミュレーション本体（DOM に依存しない）
+const W = 800, H = 450, FPS = 60, DT = 1 / FPS, PX_PER_MM = H / 24, DUR = 14, LAT = 3;
+const FNOS = [1.4, 1.8, 2, 2.8, 4, 5.6, 8, 11];
+const FEATS = [
+  ['S', '大きさ'], ['N', '近さ'], ['C', 'AF点'], ['E', '瞳'], ['F', '向き'],
+  ['V', '露出度'], ['A', '動き'], ['R', 'ピント移動'], ['K', '継続']
+];
+const SMART_W = { S: .45, N: .3, C: .4, E: .8, F: .4, V: .7, A: 2.2, R: .2, K: .3 };
+const SENS3 = { margin: .05, confirm: 10, hold: 18 };
+const CLASSES = ['track', 'pool', 'field', 'sumo'];
+const CLASS_NAME = { track: '100m 走', pool: '競泳', field: 'サッカー', sumo: '相撲' };
+
+function rngFrom(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function gauss(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const smooth = x => x * x * (3 - 2 * x);
+const D2R = Math.PI / 180;
+function normYaw(y) { return ((y + 180) % 360 + 360) % 360 - 180; }
+function hex3(h) { return [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]; }
+function kf(keys, lin) {
+  return t => {
+    if (t <= keys[0][0]) return keys[0][1];
+    for (let i = 1; i < keys.length; i++) {
+      if (t <= keys[i][0]) {
+        const [t0, v0] = keys[i - 1], [t1, v1] = keys[i];
+        let a = (t - t0) / (t1 - t0);
+        if (!lin) a = a * a * (3 - 2 * a);
+        return v0 + (v1 - v0) * a;
+      }
+    }
+    return keys[keys.length - 1][1];
+  };
+}
+// 進む向きから体の向きを求める（こちらへ来る = 0、右へ = 90、奥へ = 180）
+function yawFromPath(fx, fz, t, still) {
+  const d = .12, dx = fx(t + d) - fx(t - d), dz = fz(t + d) - fz(t - d);
+  if (Math.hypot(dx, dz) / (2 * d) < .6) return still;
+  return Math.atan2(dx, -dz) / D2R;
+}
+
+// ——— カメラ：位置 (0, Hc, 0)、水平に yaw（右が正）、下向きに pitch
+function camAt(sc, t, sim) {
+  const yaw = (typeof sc.cam.yaw === 'function' ? sc.cam.yaw(t, sim) : sc.cam.yaw || 0) * D2R, pit = (sc.cam.pitch || 0) * D2R;
+  return { F: sc.cam.f * PX_PER_MM, Hc: sc.cam.Hc, cy: Math.cos(yaw), sy: Math.sin(yaw), cp: Math.cos(pit), sp: Math.sin(pit), yaw };
+}
+function project(c, X, Y, Z) {
+  const x1 = X * c.cy - Z * c.sy, z1 = X * c.sy + Z * c.cy, yy = Y - c.Hc;
+  const zc = z1 * c.cp - yy * c.sp, yc = yy * c.cp + z1 * c.sp;
+  return { x: W / 2 + c.F * x1 / zc, y: H / 2 - c.F * yc / zc, zc };
+}
+// 画面上の点と測った距離から立ち位置を逆算（カメラは自分の向きを知っている）
+function unproject(c, x, y, zc) {
+  const x1 = (x - W / 2) * zc / c.F, yc = -(y - H / 2) * zc / c.F;
+  const yy = yc * c.cp - zc * c.sp, z1 = yc * c.sp + zc * c.cp;
+  return { X: x1 * c.cy + z1 * c.sy, Y: yy + c.Hc, Z: -x1 * c.sy + z1 * c.cy };
+}
+
+// ——— 場面の定義 ——————————————————————————————————————
+const LOOKS = {
+  white: { top: '#f2f4f6', bottom: '#f2f4f6' }, green: { top: '#e9efe9', bottom: '#2e6b3e' }, maroon: { top: '#8a2b2b', bottom: '#8a2b2b' },
+  sky: { top: '#7fb4e0', bottom: '#2a3a5a' }, navy: { top: '#2b3d6b', bottom: '#2b3d6b' }, red: { top: '#c8423a', bottom: '#2a2626' }
+};
+const SKINS = ['#e2b893', '#c99a73', '#edc6a2', '#b07f5a', '#e6bf9c', '#d5a882', '#8d5b3f'];
+const HAIRS = ['#1c1714', '#3b2a1e', '#6b4a2e', '#141110', '#9a8a7a', '#2a2420', '#c8c4bc'];
+const SHIRTS = ['#2f5fb3', '#e9ecee', '#c8423a', '#2b2f36', '#e2c24a', '#4b8a5c', '#8a5cc7', '#d9822b', '#6b7a88', '#f2f4f6'];
+
+function seatedRows(r, rows, start) {
+  const out = [];
+  let n = 0;
+  for (const rw of rows) {
+    for (let X = rw.x0 + (rw.k % 2) * rw.dx / 2; X <= rw.x1; X += rw.dx) {
+      if (r() < .07) continue;
+      n++;
+      const yaw = r() < .75 ? (r() - .5) * 36 : (r() < .5 ? -1 : 1) * (40 + r() * 30);
+      out.push({ id: (start || 'A') + String(n).padStart(3, '0'), role: 'fan', body: rw.body || 'seated', X: X + (r() - .5) * .12, Z: rw.Z + (r() - .5) * .15, Y: rw.Y,
+        Hm: (rw.body === 'stand' ? 1.7 : .92) + r() * .12, yaw: rw.yaw !== undefined ? rw.yaw + (r() - .5) * 50 : yaw,
+        shirt: SHIRTS[Math.floor(r() * SHIRTS.length)], skin: SKINS[Math.floor(r() * SKINS.length)], hair: HAIRS[Math.floor(r() * HAIRS.length)], act: .03 + r() * .04, label: rw.label });
+    }
+  }
+  return out;
+}
+
+// 100m 走：手前 Z=22 がゴール、Z=122 がスタート。カメラはゴールのさらに先
+function runnerDist(vmax, tau, t0) {
+  const arr = new Float32Array(DUR * FPS + 2);
+  let d = 0, v = 0;
+  for (let i = 0; i < arr.length; i++) {
+    const t = i * DT;
+    if (t > t0) {
+      if (d < 100) v = vmax * (1 - Math.exp(-(t - t0) / tau));
+      else v = Math.max(0, v - 6 * DT);
+      d += v * DT;
+    }
+    arr[i] = d;
+  }
+  return t => arr[clamp(Math.round(t * FPS), 0, arr.length - 1)];
+}
+function makeTrack() {
+  const r = rngFrom(11);
+  const lanes = [[2, '864', 'white', 9.9, 1.2], [3, '502', 'green', 10.25, 1.15], [4, '214', 'maroon', 10.1, 1.25], [5, '1143', 'sky', 10.5, 1.2], [6, '1082', 'navy', 10.0, 1.1], [7, '1012', 'red', 10.2, 1.2]];
+  const dyn = lanes.map(([ln, bib, look, vmax, tau], i) => {
+    const X = (ln - 4.5) * 1.22, dist = runnerDist(vmax, tau, .3);
+    return { id: 'R' + ln, name: `${ln} レーン`, role: 'athlete', body: 'stand', Hm: 1.74 + (i % 3) * .04, look: LOOKS[look], bib, skin: SKINS[i % 6], hair: HAIRS[i % 4], ratio: .3, skinR: .35,
+      pos: t => { const d = dist(t), moving = d > .01 && dist(t + .1) - d > .02; return { X, Y: 0, Z: 122 - d, yaw: 0, pose: t < .3 ? 'set' : moving ? 'run' : 'stand', act: t < .3 ? .05 : moving ? .7 : .1 }; } };
+  });
+  dyn.push({ id: 'O1', name: 'ゴール審判', role: 'official', body: 'stand', Hm: 1.76, look: { top: '#24314f', bottom: '#2a2a30' }, cap: '#f2f2f2', skin: '#d9b08c', hair: '#3b2a1e', ratio: .3, skinR: .05,
+    pos: t => ({ X: -.95, Y: 0, Z: 12, yaw: 172 + 4 * Math.sin(t * .7), pose: 'stand', act: .04 }) });
+  dyn.push({ id: 'O2', name: '旗の審判', role: 'official', body: 'stand', Hm: 1.7, look: { top: '#f2f2f2', bottom: '#24314f' }, cap: '#24314f', flag: true, skin: '#e2b893', hair: '#1c1714', ratio: .3, skinR: .05,
+    pos: t => ({ X: 3.75, Y: 0, Z: 40, yaw: -15, pose: 'stand', act: .05 }) });
+  const stat = seatedRows(r, [
+    { k: 0, Z: 126.5, Y: 0, x0: -4.2, x1: 4.2, dx: .85, body: 'stand', yaw: 0, label: '待機中の選手' },
+    { k: 1, Z: 131, Y: .7, x0: -15, x1: 15, dx: .78 }, { k: 2, Z: 132.4, Y: 1.25, x0: -15, x1: 15, dx: .78 },
+    { k: 3, Z: 133.8, Y: 1.8, x0: -15, x1: 15, dx: .78 }, { k: 4, Z: 135.2, Y: 2.35, x0: -15, x1: 15, dx: .78 }
+  ]);
+  for (const s of stat) if (s.label) { s.shirt = ['#e9ecee', '#8a2b2b', '#7fb4e0', '#2e6b3e'][Math.floor(r() * 4)]; }
+  return {
+    key: 'track', name: '100m 走', cam: { f: 200, Hc: 1.5, pitch: .5, yaw: 0 }, motor: .6, startZ: 100, fno: 3,
+    desc: '6 人がスタート（122 m 先）からゴール（22 m 先）へ向かって走ってくる。ゴールの手前 12 m に審判が背を向けて立ち、画面でいちばん大きい人物になる。スタートの奥には次の組の選手が立って待ち、その後ろのスタンドに観客がいる。',
+    ground: [.7, 0, .2, .1], lines: [1, .1, .2, 0], dyn, stat,
+    af: { u: .44, v: .45 }
+  };
+}
+
+// 競泳：プールサイドの少し高い位置から見下ろし、選手を追ってカメラを振る
+function makePool() {
+  const r = rngFrom(23);
+  const caps = ['#1c1c22', '#f2f2f2', '#c8423a', '#2f5fb3', '#e2c24a', '#f2f2f2'];
+  const vs = [1.82, 1.9, 1.86, 1.78, 1.88, 1.8], x0 = [-9.3, -8.8, -9, -9.5, -8.6, -9.2];
+  const dyn = vs.map((v, i) => {
+    const Z = 9.6 + 2.5 * i, ph = i * 1.3;
+    return { id: 'S' + (i + 1), name: `${i + 1} レーン`, role: 'athlete', body: 'swim', Hm: .36, cap: caps[i], skin: SKINS[(i + 1) % 6], hair: '#1c1714', ratio: .9, skinR: .7,
+      pos: t => { const b = Math.max(0, Math.sin(2 * Math.PI * .85 * t + ph)); return { X: x0[i] + v * t, Y: -.06 + .16 * b, Z, yaw: 90, pose: 'swim', act: .55 + .2 * b, stroke: (2 * Math.PI * .85 * t + ph) }; } };
+  });
+  [-6, .5, 7, 13.5].forEach((X, i) => dyn.push({ id: 'O' + (i + 1), name: '審判', role: 'official', body: 'stand', Hm: 1.74, look: { top: '#f4f4f4', bottom: '#1f2a44' }, cap: null, skin: SKINS[i % 5], hair: HAIRS[i % 5], ratio: .3, skinR: .06,
+    pos: t => ({ X, Y: 0, Z: 7.0, yaw: i === 1 ? 20 : 175, pose: 'stand', act: .04 }) }));
+  const stat = seatedRows(r, [{ k: 0, Z: 26.6, Y: 1.0, x0: -14, x1: 28, dx: 1.0 }, { k: 1, Z: 27.6, Y: 1.55, x0: -14, x1: 28, dx: 1.0 }, { k: 2, Z: 28.6, Y: 2.1, x0: -14, x1: 28, dx: 1.0 }]);
+  const lead = t => x0[1] + vs[1] * t;
+  return {
+    key: 'pool', name: '競泳', cam: { f: 100, Hc: 3.5, pitch: 14, yaw: (t, sim) => sim && sim.pan ? Math.atan2(sim.pan.X + .6, sim.pan.Z) / D2R : Math.atan2(lead(t) + .6, 12.1) / D2R }, motor: 1.5, startZ: 13, fno: 3,
+    desc: 'プールサイドから見下ろし、追っている選手に合わせてカメラを振る（選ぶ前は 2 レーン）。6 人が左から右へ平泳ぎで進む。手前のプールサイド（7 m）には審判が立っていて、カメラを振ると次々に画面に入ってくる。対岸のスタンドには観客。',
+    ground: [0, .8, 0, .2], lines: [.1, 1, 0, 0], dyn, stat, poolNear: 8.35, poolFar: 23.4,
+    af: { u: .5, v: .55 }
+  };
+}
+
+// サッカー：タッチライン脇から 135mm。主審がフィールドの中にいる
+function makeField() {
+  const r = rngFrom(37);
+  const HOME = { top: '#2f5fb3', bottom: '#f2f4f6' }, AWAY = { top: '#f2f4f6', bottom: '#1f1f24' }, REF = { top: '#e8d84a', bottom: '#1f1f24' };
+  const P = [
+    ['H7', HOME, 7, [[0, -1], [3, 1], [6, 2.5], [9, -1], [12, -3.5], [14, -2]], [[0, 24], [3, 22], [6, 27], [9, 30], [12, 25], [14, 22]]],
+    ['H9', HOME, 9, [[0, 2], [4, -2], [8, -4], [11, 0], [14, 3]], [[0, 31], [4, 28], [8, 22], [11, 20], [14, 26]]],
+    ['H4', HOME, 4, [[0, -5], [5, -1], [9, 3], [14, 5]], [[0, 19], [5, 21], [9, 25], [14, 33]]],
+    ['H11', HOME, 11, [[0, 5], [4, 4], [8, 1], [14, -4]], [[0, 35], [4, 33], [8, 30], [14, 29]]],
+    ['A3', AWAY, 3, [[0, 1], [3, 3], [6, 0], [9, -2], [12, 0], [14, 2]], [[0, 26], [3, 25], [6, 24], [9, 28], [12, 31], [14, 27]]],
+    ['A6', AWAY, 6, [[0, -2], [4, -4], [7, -1], [10, 2], [14, 4]], [[0, 29], [4, 25], [7, 23], [10, 22], [14, 24]]],
+    ['A8', AWAY, 8, [[0, 4], [5, 1], [9, -3], [14, -1]], [[0, 21], [5, 24], [9, 26], [14, 20]]],
+    ['A10', AWAY, 10, [[0, -4], [4, 0], [8, 4], [14, 1]], [[0, 33], [4, 35], [8, 32], [14, 34]]]
+  ];
+  const dyn = P.map(([id, look, num, xs, zs], i) => {
+    const fx = kf(xs), fz = kf(zs);
+    return { id, name: `${look === HOME ? '青' : '白'} ${num}`, role: 'athlete', body: 'stand', Hm: 1.78 + (i % 4) * .03, look, num, col: look.top, skin: SKINS[i % 7], hair: HAIRS[i % 6], ratio: .3, skinR: .3,
+      pos: t => ({ X: fx(t), Y: 0, Z: fz(t), yaw: yawFromPath(fx, fz, t, 0), pose: 'run', act: .45 }) };
+  });
+  const rx = kf([[0, .3], [3, -.8], [6, .6], [9, .2], [12, -.6], [14, 0]]), rz = kf([[0, 23], [3, 21], [6, 24], [9, 22], [12, 23], [14, 21]]);
+  dyn.push({ id: 'REF', name: '主審', role: 'official', body: 'stand', Hm: 1.8, look: REF, col: REF.top, skin: '#e2b893', hair: '#2a2420', ratio: .3, skinR: .3,
+    pos: t => ({ X: rx(t), Y: 0, Z: rz(t), yaw: yawFromPath(rx, rz, t, 0), pose: 'run', act: .45 }) });
+  const stat = seatedRows(r, [0, 1, 2, 3, 4, 5].map(k => ({ k, Z: 45 + 1.0 * k, Y: .5 + .5 * k, x0: -8.5, x1: 8.5, dx: .62 })));
+  return {
+    key: 'field', name: 'サッカー', cam: { f: 135, Hc: 1.6, pitch: 1.2, yaw: 0 }, motor: .8, startZ: 25, fno: 3,
+    desc: '青と白のチームが 4 人ずつ、その間を黄色の主審が走る。主審は選手と同じ距離・同じ動き方をするので、距離や動きでは区別できない。奥の広告ボードの向こうはスタンドの観客。',
+    ground: [0, 0, .8, .2], lines: [.2, .1, 1, .3], dyn, stat, boardZ: 42,
+    af: { u: .43, v: .4 }
+  };
+}
+
+// 相撲：前回の相撲ラボと同じ
+const RING = { cz: 7.6, r: 2.3, h: .6, top: 2.75, base: 3.35 };
+const T0 = 1.0, T1 = 1.35;
+function pairAt(t) {
+  if (t < T0) return { cx: 0, cz: RING.cz, th: Math.PI, sep: 1.5, phase: 'shikiri' };
+  if (t < T1) { const a = smooth((t - T0) / (T1 - T0)); return { cx: 0, cz: RING.cz, th: Math.PI, sep: 1.5 - .95 * a, phase: 'charge' }; }
+  const u = t - T1, ramp = Math.min(1, u / 1.2);
+  return { cx: .95 * Math.sin(.42 * u) * ramp, cz: RING.cz + .85 * Math.sin(.31 * u) * ramp, th: Math.PI + 1.0 * u + .45 * Math.sin(.8 * u), sep: .55, phase: 'clinch' };
+}
+function makeSumo() {
+  const r = rngFrom(777);
+  const rik = (id, k, skin, col, Hm) => ({ id, name: k > 0 ? '東の力士' : '西の力士', role: 'athlete', body: 'rikishi', Hm, skin, hair: '#141110', col, ratio: .46, skinR: .85,
+    pos: t => {
+      const p = pairAt(t);
+      const X = p.cx + k * p.sep / 2 * Math.cos(p.th), Z = p.cz + k * p.sep / 2 * Math.sin(p.th);
+      const oX = p.cx - k * p.sep / 2 * Math.cos(p.th), oZ = p.cz - k * p.sep / 2 * Math.sin(p.th);
+      return { X, Y: RING.h, Z, yaw: Math.atan2(oX - X, -(oZ - Z)) / D2R, pose: p.phase, act: p.phase === 'charge' ? 1 : p.phase === 'clinch' ? .55 + .2 * Math.sin(t * 3 + k) : .05,
+        crouch: p.phase === 'shikiri' ? .36 : p.phase === 'charge' ? .22 : .14, lean: p.phase === 'shikiri' ? 0 : .09, faceDown: p.phase === 'clinch' };
+    } });
+  const dyn = [rik('E', 1, '#d9a47e', '#1d1d24', 1.86), rik('W', -1, '#c48a64', '#6b2f8a', 1.84)];
+  dyn.push({ id: 'G', name: '行司', role: 'official', body: 'gyoji', Hm: 1.88, skin: '#e2b893', hair: '#2a2420', col: '#2f6e5a', ratio: .3, skinR: .06,
+    pos: t => {
+      const p = pairAt(t);
+      const phi = Math.PI / 2 + .55 * t + .25 * Math.sin(.9 * t), rg = 1.65 + .2 * Math.sin(.7 * t);
+      let X = p.cx + rg * Math.cos(phi), Z = p.cz + rg * Math.sin(phi);
+      const dr = Math.hypot(X, Z - RING.cz);
+      if (dr > 2.1) { X *= 2.1 / dr; Z = RING.cz + (Z - RING.cz) * 2.1 / dr; }
+      return { X, Y: RING.h, Z, yaw: Math.atan2(p.cx - X, -(p.cz - Z)) / D2R, pose: 'gyoji', act: .25, crouch: .04 };
+    } });
+  [['J1', .55, 4.0], ['J2', -.6, 11.0]].forEach(([id, X, Z]) => dyn.push({ id, name: '審判', role: 'official', body: 'seated', Hm: .98, shirt: '#1a1a1e', skin: '#d9b08c', hair: '#c8c4bc', col: '#1a1a1e', ratio: .5, skinR: .04,
+    pos: t => ({ X, Y: 0, Z, yaw: Math.atan2(-X, -(RING.cz - Z)) / D2R, pose: 'seated', act: .03 }) }));
+  const rows = [];
+  for (let k = 0; k < 7; k++) { const Z = 11.25 + .85 * k, half = 400 * Z / (70 * PX_PER_MM) + .3; rows.push({ k, Z, Y: k < 3 ? 0 : .35 * (k - 2), x0: -half, x1: half, dx: .55 }); }
+  const stat = seatedRows(r, rows).filter(s => !(Math.abs(s.Z - 11.25) < .3 && Math.abs(s.X + .6) < .5));
+  return {
+    key: 'sumo', name: '相撲', cam: { f: 70, Hc: 1.55, pitch: 0, yaw: 0 }, motor: 2.5, startZ: 7.6, fno: 1,
+    desc: '前回の相撲ラボと同じ取組。組み合った力士の周りを行司が回り、手前と奥の土俵下に審判、奥に砂かぶりの観客。',
+    ground: [.05, 0, 0, .95], lines: [0, 0, 0, 1], dyn, stat, ring: RING,
+    af: { u: .34, v: .55 }
+  };
+}
+const SCENES = [makeTrack(), makePool(), makeField(), makeSumo()];
+
+// ——— 人物の幾何 ——————————————————————————————————————
+const DISK = [[0, 0]];
+for (let i = 0; i < 6; i++) DISK.push([.5 * Math.cos(i * Math.PI / 3), .5 * Math.sin(i * Math.PI / 3)]);
+for (let i = 0; i < 8; i++) DISK.push([.88 * Math.cos(i * Math.PI / 4 + .3), .88 * Math.sin(i * Math.PI / 4 + .3)]);
+function inEll(px, py, e) { const dx = (px - e.x) / e.rx, dy = (py - e.y) / e.ry; return dx * dx + dy * dy <= 1; }
+
+function geom(cam, st, Hm, body, crouch, lean) {
+  const ft = project(cam, st.X, st.Y, st.Z), hd = project(cam, st.X, st.Y + Hm * (1 - crouch), st.Z);
+  const zc = (ft.zc + hd.zc) / 2;
+  st.zc = zc; st.s = cam.F / zc;
+  const x = (ft.x + hd.x) / 2, top = hd.y, feet = ft.y, hh = feet - top;
+  st.cx = x; st.top = top; st.feet = feet; st.hh = hh; st.cy = (top + feet) / 2;
+  // 体の向き：カメラから見た角度に直す
+  const rel = normYaw(st.yaw - cam.yaw / D2R * 0 - Math.atan2(st.X, st.Z) / D2R * 0);
+  st.ryaw = rel;
+  const ay = Math.abs(rel);
+  st.view = ay < 35 ? 'front' : ay > 145 ? 'back' : 'side';
+  st.dir = rel >= 0 ? 1 : -1;
+  const shapes = [];
+  const lx = (lean || 0) * hh;
+  if (body === 'seated') {
+    const hy = top + .11 * hh;
+    shapes.push({ x, y: hy, rx: .095 * hh, ry: .105 * hh, part: 'head' });
+    shapes.push({ x, y: top + .55 * hh, rx: (st.view === 'side' ? .15 : .22) * hh, ry: .33 * hh, part: 'body' });
+    st.headR = .1 * hh; st.headY = hy; st.headX = x;
+    st.eye = st.view === 'back' ? null : { x: x + (st.view === 'side' ? st.dir * .05 * hh : 0), y: hy, r: .018 * hh };
+  } else if (body === 'swim') {
+    // 水面から上だけが見える：頭と肩
+    const hy = top + .32 * hh;
+    shapes.push({ x: x + st.dir * .15 * hh, y: hy, rx: .3 * hh, ry: .32 * hh, part: 'head' });
+    shapes.push({ x, y: top + .82 * hh, rx: .85 * hh, ry: .2 * hh, part: 'body' });
+    st.headR = .31 * hh; st.headY = hy; st.headX = x + st.dir * .15 * hh;
+    st.eye = st.view === 'back' ? null : { x: st.headX + st.dir * .15 * hh, y: hy, r: .045 * hh };
+  } else {
+    const wide = body === 'rikishi' ? (st.view === 'side' ? .16 : .2) : body === 'gyoji' ? (st.view === 'side' ? .1 : .14) : (st.view === 'side' ? .085 : .13);
+    const hy = top + .075 * hh, hx = x + lx;
+    shapes.push({ x: hx, y: hy, rx: .072 * hh, ry: .078 * hh, part: 'head' });
+    shapes.push({ x: x + lx * .5, y: top + .34 * hh, rx: wide * hh, ry: .2 * hh, part: 'body' });
+    shapes.push({ x, y: top + .74 * hh, rx: (wide - .03) * hh, ry: .26 * hh, part: 'body' });
+    st.headR = .072 * hh; st.headY = hy; st.headX = hx;
+    st.eye = st.view === 'back' ? null : { x: hx + (st.view === 'side' ? st.dir * .035 * hh : 0), y: hy, r: .012 * hh };
+  }
+  st.hpx = hh; st.shapes = shapes;
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  for (const sh of shapes) { x0 = Math.min(x0, sh.x - sh.rx); x1 = Math.max(x1, sh.x + sh.rx); y0 = Math.min(y0, sh.y - sh.ry); y1 = Math.max(y1, sh.y + sh.ry); }
+  if (body !== 'seated' && body !== 'swim') y1 = Math.max(y1, feet);
+  st.box = [x0, y0, x1, y1];
+  return st;
+}
+function dynState(cam, d, t) {
+  const p = d.pos(t);
+  const st = { id: d.id, role: d.role, def: d, X: p.X, Y: p.Y, Z: p.Z, yaw: normYaw(p.yaw - Math.atan2(p.X, p.Z) / D2R), pose: p.pose, act: p.act, faceDown: !!p.faceDown, stroke: p.stroke };
+  return geom(cam, st, d.Hm, d.body, p.crouch || (p.pose === 'set' ? .42 : 0), p.lean ? p.lean * (Math.sin(p.yaw * D2R) >= 0 ? 1 : -1) : 0);
+}
+function statState(cam, f) {
+  const st = { id: f.id, role: f.role, def: f, X: f.X, Y: f.Y, Z: f.Z, yaw: normYaw(f.yaw - Math.atan2(f.X, f.Z) / D2R), pose: f.body === 'stand' ? 'stand' : 'seated', act: f.act };
+  return geom(cam, st, f.Hm, f.body, 0, 0);
+}
+// 固定の背景物（土俵の胴体・広告ボード）で隠れるか
+function sceneryHides(sc, cam, px, py, st) {
+  if (sc.ring && st.Z > RING.cz + RING.base) {
+    const e = project(cam, 0, RING.h, RING.cz + RING.base);
+    if (py > e.y) { const X = (px - W / 2) * e.zc / cam.F; if (Math.abs(X) < RING.base) return true; }
+  }
+  if (sc.boardZ && st.Z > sc.boardZ) { const e = project(cam, 0, .9, sc.boardZ); if (py > e.y) return true; }
+  if (sc.key === 'pool' && st.Z > 25.5) { const e = project(cam, 0, .9, 25.5); if (py > e.y) return true; }
+  return false;
+}
+// 観客どうしの隠れは最初のカメラ位置で 1 回だけ計算（どの点が見えるかのマスク）
+function precomputeStatics(sc) {
+  const cam = camAt(sc, 0);
+  const base = sc.stat.map(f => statState(cam, f));
+  for (const st of base) {
+    const mask = [];
+    let n = 0, hn = 0;
+    st.shapes.forEach((sh, si) => DISK.forEach(([dx, dy], di) => {
+      const px = sh.x + dx * sh.rx, py = sh.y + dy * sh.ry;
+      n++; if (sh.part === 'head') hn++;
+      if (sceneryHides(sc, cam, px, py, st)) return;
+      for (const o of base) { if (o === st || o.Z >= st.Z) continue; for (const s2 of o.shapes) if (inEll(px, py, s2)) return; }
+      mask.push([si, di]);
+    }));
+    st.def.mask = mask; st.def.n = n; st.def.hn = hn; st.def.base = st;
+  }
+}
+SCENES.forEach(precomputeStatics);
+
+function visDyn(st, dyns) {
+  let n = 0, vis = 0, hn = 0, hv = 0;
+  for (const sh of st.shapes) for (const [dx, dy] of DISK) {
+    const px = sh.x + dx * sh.rx, py = sh.y + dy * sh.ry;
+    n++; if (sh.part === 'head') hn++;
+    if (px < 0 || px > W || py < 0 || py > H) continue;
+    let hid = false;
+    for (const o of dyns) { if (o === st || o.zc >= st.zc) continue; for (const s2 of o.shapes) if (inEll(px, py, s2)) { hid = true; break; } if (hid) break; }
+    if (!hid) { vis++; if (sh.part === 'head') hv++; }
+  }
+  st.vis = vis / n; st.headVis = hn ? hv / hn : 0;
+}
+function visStat(st, dyns) {
+  const f = st.def, [bx0, by0, bx1, by1] = st.box;
+  if (bx1 < 0 || bx0 > W || by1 < 0 || by0 > H) { st.vis = 0; st.headVis = 0; return; }
+  const over = dyns.filter(p => p.zc < st.zc && !(p.box[2] < bx0 || p.box[0] > bx1 || p.box[3] < by0 || p.box[1] > by1));
+  let vis = 0, hv = 0;
+  for (const [si, di] of f.mask) {
+    const sh = st.shapes[si], px = sh.x + DISK[di][0] * sh.rx, py = sh.y + DISK[di][1] * sh.ry;
+    if (px < 0 || px > W || py < 0 || py > H) continue;
+    let hid = false;
+    for (const o of over) { for (const s2 of o.shapes) if (inEll(px, py, s2)) { hid = true; break; } if (hid) break; }
+    if (!hid) { vis++; if (sh.part === 'head') hv++; }
+  }
+  st.vis = vis / f.n; st.headVis = f.hn ? hv / f.hn : 0;
+}
+
+function tolOf(sc, fno) { const f = sc.cam.f / 1000; return 0.03e-3 * fno / (f * f); }
+function blurPx(sc, fno, Z, lensD) { const f = sc.cam.f / 1000; return (f * f / fno) * Math.abs(1 / Z - lensD) * 1000 * PX_PER_MM; }
+function nmOf(sim, id) { const d = sim.byId[id]; return d ? (d.name || (d.label ? `${d.label} ${id}` : `観客 ${id}`)) : id; }
+
+// ——— 競技ごとのルール（プロファイル）——————————————————————
+const PROFILES = {
+  generic: { name: '汎用（総合スコア）', rule: '競技を知らない状態。9 つの手がかりの重み付き合計で選び、じっと座って密集している人だけを観客として外す。' },
+  track: { name: '100m 走', rule: 'カメラへ向かって秒速 2 m 以上で近づいている人だけを選手とみなす（止まっている審判・待機中の選手・観客は外れる）。レーンの外（横 ±5.2 m より外）も外す。' },
+  pool: { name: '競泳', rule: 'プールの中（7.9〜23.9 m）にいて、頭頂が水面から 0.8 m より低い人だけを選手とみなす（立っている審判、対岸のスタンドの観客は外れる）。' },
+  field: { name: 'サッカー', rule: 'フィールドの中（奥行き 41 m まで）で、同じ色のユニフォームの人が 2 人以上いるチームの人だけを選手とみなす（ひとりだけ色の違う主審は外れる）。観客席は奥行きで外れる。' },
+  sumo: { name: '相撲', rule: '土俵の円の中にいて頭が 1.7 m より高く、力士らしさ（組み合い・体の幅・上半身の肌）が 0.45 以上の人だけを候補にする。組み合った 2 人をひとまとまりとして追う。' }
+};
+
+// ——— シーン判別器 ——————————————————————————————————————
+// 手がかり：①下半分の色の割合 ②線の模様 ③人の動き方 ④姿勢と組み合い
+const PROTO = {
+  track: { G: [.7, 0, .2, .1], L: [1, .1, .2, 0], D: .9, C: .5, S: 0, K: .1 },
+  pool: { G: [0, .8, 0, .2], L: [.1, 1, 0, 0], D: .1, C: .95, S: .9, K: .1 },
+  field: { G: [0, 0, .8, .2], L: [.2, .1, 1, .3], D: .4, C: .3, S: 0, K: .1 },
+  sumo: { G: [.05, 0, 0, .95], L: [0, 0, 0, 1], D: .3, C: .2, S: 0, K: .9 }
+};
+function classify(sim, cands) {
+  const { scene: sc, cfg, rng } = sim;
+  const cue = cfg.cues;
+  const f = { movers: 0 };
+  const noisy = v => v.map(x => clamp(x + gauss(rng) * .07, 0, 1));
+  if (cue.color) f.G = noisy(sc.ground);
+  if (cue.lines) f.L = noisy(sc.lines);
+  if (cue.motion || cue.pose) {
+    let nm = 0, dsum = 0, csum = 0, cn = 0, kn = 0, sw = 0, sn = 0;
+    const movers = [];
+    for (const c of cands) {
+      if (c.coast || c.st.hpx < 12) continue;
+      sn++; if (c.st.hpx / c.st.headR < 5.5) sw++;
+      const m = c.mot;
+      if (!m) continue;
+      const sp = Math.hypot(m.vx, m.vz);
+      if (sp < .8) continue;
+      nm++; dsum += Math.abs(m.vz) / (Math.abs(m.vz) + Math.abs(m.vx) + 1e-6);
+      if (Math.abs(m.vx) > .5) { csum += Math.sign(m.vx); cn++; }
+      movers.push(c);
+    }
+    for (const c of movers) if (movers.some(o => o !== c && Math.hypot(o.Xe - c.Xe, o.Ze - c.Ze) < .9)) kn++;
+    f.movers = nm;
+    if (cue.motion && nm >= 2) { f.D = dsum / nm; f.C = cn ? Math.abs(csum / cn) : 0; }
+    if (cue.pose) { f.S = sn ? sw / sn : 0; if (nm >= 2) f.K = kn / nm; }
+  }
+  const sq = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += (a[i] - b[i]) ** 2; return s; };
+  const ll = {};
+  for (const k of CLASSES) {
+    const p = PROTO[k];
+    let v = 0;
+    if (f.G) v -= sq(f.G, p.G) / .06;
+    if (f.L) v -= sq(f.L, p.L) / .06;
+    if (f.D !== undefined) v -= (f.D - p.D) ** 2 / .03 + (f.C - p.C) ** 2 / .12;
+    if (f.S !== undefined) v -= (f.S - p.S) ** 2 / .05;
+    if (f.K !== undefined) v -= (f.K - p.K) ** 2 / .08;
+    ll[k] = v;
+  }
+  const cs = sim.cls;
+  for (const k of CLASSES) cs.acc[k] = cs.acc[k] * .92 + ll[k] * .08;
+  let mx = -1e9; for (const k of CLASSES) mx = Math.max(mx, cs.acc[k]);
+  let z = 0; const post = {};
+  for (const k of CLASSES) { post[k] = Math.exp((cs.acc[k] - mx) * 1.2); z += post[k]; }
+  for (const k of CLASSES) post[k] /= z;
+  cs.post = post; cs.feat = f;
+  const top = CLASSES.reduce((a, b) => post[a] >= post[b] ? a : b);
+  if (!cs.decided) {
+    if (sim.frame >= 12 && post[top] >= .85) { cs.decided = top; cs.decidedT = sim.t; addLog(sim, `シーン判別：${CLASS_NAME[top]}（${Math.round(post[top] * 100)}%）→ ${CLASS_NAME[top]}のルールで追い始める`, top === sc.key ? 'ok' : 'bad'); }
+  } else if (top !== cs.decided && post[top] >= .95) {
+    cs.flip = (cs.flip || 0) + 1;
+    if (cs.flip > 30) { addLog(sim, `判別を ${CLASS_NAME[cs.decided]} から ${CLASS_NAME[top]} に変更`, top === sc.key ? 'ok' : 'bad'); cs.decided = top; cs.flip = 0; sim.cur = null; }
+  } else cs.flip = 0;
+}
+
+// ——— シミュレーション —————————————————————————————————————
+function makeSim(cfg, seed) {
+  const scene = SCENES[cfg.scene];
+  const byId = {}; for (const d of scene.dyn) byId[d.id] = d; for (const f of scene.stat) byId[f.id] = f;
+  const sim = {
+    cfg, scene, byId, rng: rngFrom(seed || 5150), frame: 0, t: 0,
+    lensD: 1 / scene.startZ, cmdQ: [], est: null, cur: null, curRole: null, pendId: null, pendN: 0, lostN: 0, kTrust: 1,
+    lastPos: null, tracks: {}, dyns: [], stats: [], cands: [], log: [], done: false, switches: 0,
+    cls: { acc: { track: 0, pool: 0, field: 0, sumo: 0 }, post: { track: .25, pool: .25, field: .25, sumo: .25 }, decided: null, decidedT: null },
+    hist: { cur: [], role: [], lens: [], focusA: [], anyA: [], hold: [], prof: [], zA: [], zO: [] }
+  };
+  for (let i = 0; i < LAT; i++) sim.cmdQ.push(sim.lensD);
+  return sim;
+}
+const HISTN = 90;
+function track(sim, id) {
+  return sim.tracks[id] || (sim.tracks[id] = { A: 0, seenF: -99, last: null, ring: new Float32Array(HISTN * 3), rn: 0, Dsm: null, crowd: 0, crowdFlag: false, contact: 0, rs: .5, rFlag: false, runF: -999, colN: 0 });
+}
+function activeProfile(sim) {
+  const m = sim.cfg.mode;
+  if (m === 'auto') return sim.cls.decided;          // 判別が終わるまでは null（AF を始めない）
+  return m;
+}
+
+function stepSim(sim) {
+  if (sim.done) return;
+  const { cfg, rng, scene: sc } = sim;
+  const t = sim.t = sim.frame * DT;
+  if (sc.key === 'pool') {
+    // 撮影者は自分が追っている選手に合わせてカメラを振る（まだ選んでいなければ 2 レーン）
+    const tgt = sim.cur && sim.byId[sim.cur].body === 'swim' ? sim.byId[sim.cur].pos(t) : sc.dyn[1].pos(t);
+    if (!sim.pan) sim.pan = { X: tgt.X, Z: tgt.Z };
+    sim.pan.X += (tgt.X - sim.pan.X) * .08; sim.pan.Z += (tgt.Z - sim.pan.Z) * .05;
+  }
+  const cam = sim.cam = camAt(sc, t, sim);
+  const fno = FNOS[cfg.fnoIdx], tol = tolOf(sc, fno);
+  const dyns = sc.dyn.map(d => dynState(cam, d, t));
+  for (const st of dyns) visDyn(st, dyns);
+  const stats = sc.stat.map(f => statState(cam, f));
+  for (const st of stats) visStat(st, dyns);
+  sim.dyns = dyns; sim.stats = stats;
+  const all = dyns.concat(stats);
+
+  // ——— 検出と観測
+  const cands = [];
+  for (const st of all) {
+    const tr = track(sim, st.id);
+    // 位置の履歴は、カメラの振り（ジャイロ）を補正した角度で持つ
+    const az = (Math.atan((st.cx - W / 2) / cam.F) + cam.yaw) * cam.F;
+    const i0 = (tr.rn % HISTN) * 3; tr.ring[i0] = az; tr.ring[i0 + 1] = st.cy; tr.ring[i0 + 2] = st.hpx; tr.rn++;
+    const b = blurPx(sc, fno, st.zc, sim.lensD);
+    st.blur = b;
+    const tracked = sim.frame - tr.seenF <= 5;
+    let p = 0;
+    if (st.vis >= .2 && st.hpx >= 10) {
+      p = clamp(.35 + (st.vis - .2) * 1.6, 0, .98);
+      if (b > .35 * st.hpx) p *= .6;
+      if (tracked) p = Math.max(p, .97);
+    } else if (tracked && st.vis >= .1) p = .9;
+    const det = rng() < p;
+    st.det = det;
+    if (!det) {
+      if (tracked && tr.last && st.vis > .02) cands.push({ ...tr.last, st, coast: true, f: { ...tr.last.f, K: st.id === sim.cur ? sim.kTrust : 0 } });
+      continue;
+    }
+    tr.seenF = sim.frame;
+    const measD = 1 / st.zc + gauss(rng) * .25 * tol * (1 + Math.abs(1 / st.zc - sim.lensD) / (6 * tol));
+    tr.Dsm = tr.Dsm === null ? measD : tr.Dsm * .8 + measD * .2;
+    const faceOk = !st.faceDown || rng() < .12;
+    const eyeOk = faceOk && st.eye && st.headVis >= .5 && st.eye.r * 2 >= 1.6 && b < st.headR * 2 && Math.abs(st.ryaw) < 120;
+    st.eyeDet = eyeOk && rng() < .92;
+    const facing = (1 + Math.cos(st.ryaw * D2R)) / 2 * Math.min(1, st.headVis * 1.4) * (st.faceDown ? .35 : 1);
+    tr.A = tr.A * .7 + clamp(.8 * clamp(st.act + gauss(rng) * .04, 0, 1), 0, 1) * .3;
+    const dx = (st.cx - cfg.af.u * W) / W, dy = (st.cy - cfg.af.v * H) / W;
+    const d = st.def;
+    const nz = .03 + .12 * (1 - st.vis) + .01 * b;
+    tr.last = {
+      id: st.id, st, role: st.role, measD,
+      obs: { ratio: (d.ratio !== undefined ? d.ratio : .5) + gauss(rng) * nz, skin: clamp((d.skinR !== undefined ? d.skinR : .12) + gauss(rng) * nz, 0, 1), col: d.col || (d.look ? d.look.top : d.shirt) },
+      f: {
+        S: clamp(Math.sqrt(st.hpx / (.6 * H)), 0, 1), N: 0,
+        C: Math.exp(-(dx * dx + dy * dy) / (2 * .18 * .18)),
+        E: st.eyeDet ? 1 : .3 * facing, F: facing, V: st.vis, A: tr.A,
+        R: Math.exp(-Math.abs(measD - sim.lensD) / (10 * tol)),
+        K: st.id === sim.cur ? sim.kTrust : 0
+      }
+    };
+    cands.push(tr.last);
+  }
+
+  // ——— 立ち位置と動き（カメラが知っている情報だけで推定）
+  for (const c of cands) {
+    const tr = sim.tracks[c.id], zc = 1 / tr.Dsm;
+    const ft = unproject(cam, c.st.cx, c.st.feet, zc), hd = unproject(cam, c.st.cx, c.st.top, zc);
+    c.Xe = ft.X; c.Ze = ft.Z; c.topE = hd.Y; c.feetE = ft.Y;
+    c.mot = null;
+    if (tr.rn > 16) {
+      const k = ((tr.rn - 16) % HISTN) * 3;
+      const dAz = (tr.ring[(tr.rn - 1) % HISTN * 3] - tr.ring[k]) / cam.F;        // ラジアン
+      const gr = Math.log(c.st.hpx / Math.max(1, tr.ring[k + 2]));
+      c.mot = { vx: dAz * zc / (15 * DT), vz: -gr * zc / (15 * DT) };            // m/s（vz は手前へ来ると負）
+    }
+  }
+
+  // ——— 観客らしさ・力士らしさ・組み合い・色の仲間（4 コマに 1 回）
+  {
+    const n = cands.length;
+    for (let i = 0; i < n; i++) {
+      const c = cands[i], tr = sim.tracks[c.id], st = c.st;
+      if (tr.crowdF !== undefined && (sim.frame + tr.slot) % 4 !== 0) { c.crowd = tr.crowd; c.rs = tr.rs; continue; }
+      if (tr.slot === undefined) tr.slot = i % 4;
+      tr.crowdF = sim.frame;
+      let still = .5;
+      const nh = Math.min(tr.rn, HISTN);
+      if (nh >= HISTN) {
+        let mx = 0;
+        for (let k = 0; k < nh; k++) {
+          const dd = Math.hypot(tr.ring[k * 3] - tr.ring[(tr.rn - 1) % HISTN * 3], tr.ring[k * 3 + 1] - st.cy) / (.3 * st.hpx);
+          const z = Math.abs(tr.ring[k * 3 + 2] - st.hpx) / (.1 * st.hpx);
+          if (dd > mx) mx = dd; if (z > mx) mx = z;
+        }
+        still = clamp(1 - mx, 0, 1);
+      }
+      let dense = 0, dmin = 1e9, same = 0;
+      for (let j = 0; j < n; j++) {
+        if (j === i) continue;
+        const o = cands[j];
+        const d3 = Math.hypot(o.Xe - c.Xe, o.Ze - c.Ze);
+        if (d3 < dmin) dmin = d3;
+        if (o.obs.col === c.obs.col && o.Ze < 41) same++;
+        if (Math.abs(sim.tracks[o.id].Dsm - tr.Dsm) > .006) continue;
+        const r = o.st.hpx / st.hpx;
+        if (r < .6 || r > 1.6) continue;
+        if (Math.abs(o.st.cx - st.cx) > 3 * st.hpx || Math.abs(o.st.cy - st.cy) > 2 * st.hpx) continue;
+        dense++;
+      }
+      const sc2 = .5 * still + .5 * clamp((dense - 1) / 4, 0, 1);
+      tr.crowd = sc2;
+      if (sc2 > .6) tr.crowdFlag = true; else if (sc2 < .5) tr.crowdFlag = false;
+      tr.contact = tr.contact * .7 + (dmin < .9 ? 1 : 0) * .3;
+      tr.rs = tr.rs * .6 + (.4 * tr.contact + .3 * clamp((c.obs.ratio - .32) / .12, 0, 1) + .3 * c.obs.skin) * .4;
+      if (tr.rs < .45) tr.rFlag = true; else if (tr.rs > .5) tr.rFlag = false;
+      tr.colN = tr.colN * .7 + same * .3;     // 同じ色の仲間の数（平均）
+      c.crowd = sc2; c.rs = tr.rs;
+    }
+  }
+  for (const c of cands) {
+    const tr = sim.tracks[c.id];
+    if (c.mot && -c.mot.vz > 2) tr.runF = sim.frame;   // 秒速 2 m 以上で近づいた
+  }
+
+  // ——— シーン判別
+  classify(sim, cands);
+  const prof = activeProfile(sim);
+  sim.prof = prof;
+
+  // ——— スコアと除外
+  if (cands.length) {
+    let mn = 1e9, mx = -1e9; for (const c of cands) { mn = Math.min(mn, c.measD); mx = Math.max(mx, c.measD); }
+    for (const c of cands) c.f.N = mx - mn < 1e-9 ? 1 : (c.measD - mn) / (mx - mn);
+  }
+  const w = SMART_W;
+  let wsum = 0; for (const [k] of FEATS) wsum += w[k];
+  for (const c of cands) {
+    let s = 0; for (const [k] of FEATS) s += w[k] * c.f[k];
+    c.score = s / wsum;
+    c.ex = exclude(sim, prof, c);
+  }
+  cands.sort((a, b) => b.score - a.score);
+  sim.cands = cands;
+  const elig = cands.filter(c => !c.ex);
+
+  // ——— 選択
+  const curC = elig.find(c => c.id === sim.cur);
+  if (!prof) { /* 判別中：まだ選ばない */ }
+  else if (prof === 'generic') genericStep(sim, cands, elig, curC, w, wsum);
+  else if (prof === 'track') cfg.follow === 'lead' ? leaderStep(sim, elig, curC, c => c.Ze, -1, 1.0, '先頭の選手') : fieldStep(sim, elig, curC);
+  else if (prof === 'pool') cfg.follow === 'lead' ? leaderStep(sim, elig, curC, c => c.Xe, 1, .4, '先頭の選手') : fieldStep(sim, elig, curC);
+  else if (prof === 'field') fieldStep(sim, elig, curC);
+  else if (prof === 'sumo') sumoStep(sim, elig, curC);
+
+  // ——— 位相差AF とレンズ
+  const sel = cands.find(c => c.id === sim.cur && !c.ex);
+  if (sel && !sel.coast) {
+    const m = sel.measD;
+    if (!sim.est) sim.est = { D: m, v: 0 };
+    else { const pred = sim.est.D + sim.est.v * DT; const r = m - pred; sim.est.D = pred + .5 * r; sim.est.v = clamp(sim.est.v + .1 * r / DT, -2, 2); }
+  } else if (sim.est) { sim.est.v *= .9; sim.est.D += sim.est.v * DT; }
+  const cmd = sim.est ? sim.est.D + sim.est.v * (LAT + 1) * DT : sim.lensD;
+  sim.cmdQ.push(cmd);
+  const tg = sim.cmdQ.shift();
+  sim.lensD += clamp(tg - sim.lensD, -sc.motor * DT, sc.motor * DT);
+
+  // ——— 評価（台本の正解を使うのはここだけ）
+  const h = sim.hist;
+  const ath = dyns.filter(d => d.role === 'athlete');
+  const anyA = ath.some(d => d.vis >= .3);
+  const selA = sim.cur && sim.byId[sim.cur].role === 'athlete';
+  const focusA = selA && ath.some(d => d.vis >= .3 && Math.abs(sim.lensD - 1 / d.zc) <= tol);   // 選手を選び、しかも選手に合焦
+  h.cur.push(sim.cur); h.role.push(sim.cur ? sim.byId[sim.cur].role : null); h.lens.push(sim.lensD);
+  h.focusA.push(focusA); h.anyA.push(anyA); h.hold.push(sim.lostN > 0 || !sim.cur); h.prof.push(prof);
+  h.zA.push(ath.map(d => d.zc)); h.zO.push(dyns.filter(d => d.role === 'official').map(d => d.zc));
+  sim.status = { focusA, role: sim.cur ? sim.byId[sim.cur].role : null };
+  sim.frame++;
+  if (sim.frame >= DUR * FPS) sim.done = true;
+}
+
+function exclude(sim, prof, c) {
+  const tr = sim.tracks[c.id], sc = sim.scene;
+  if (!prof) return 'wait';
+  if (prof === 'generic') return tr.crowdFlag ? 'crowd' : null;
+  if (prof === 'track') {
+    if (Math.abs(c.Xe) > 5.2) return 'lane';
+    if (sim.frame - tr.runF > 90) return 'still';     // 1.5 秒以上、近づいてきていない
+    return null;
+  }
+  if (prof === 'pool') {
+    if (c.Ze < 7.9 || c.Ze > 23.9) return 'outpool';
+    if (c.topE > .8) return 'above';
+    return null;
+  }
+  if (prof === 'field') {
+    if (c.Ze > 41) return 'outfield';
+    if (tr.crowdFlag) return 'crowd';
+    if (tr.colN < .9) return 'single';
+    return null;
+  }
+  if (prof === 'sumo') {
+    const inRing = c.Xe * c.Xe + (c.Ze - RING.cz) ** 2 <= (RING.r + .35) ** 2 && c.topE > 1.7;
+    if (!inRing) return 'ring';
+    if (tr.rFlag) return 'role';
+    return null;
+  }
+  return null;
+}
+const EX_TEXT = {
+  wait: '判別待ち', crowd: '観客（静止×密集）', lane: 'レーンの外', still: '走っていない', outpool: 'プールの外', above: '体が水面より上（立っている）',
+  outfield: 'フィールドの外', single: '色の仲間がいない（主審）', ring: '土俵の外', role: '力士らしくない'
+};
+
+function updLast(sim, st) {
+  if (sim.lastPos) { sim.lastPos.vx = sim.lastPos.vx * .8 + (st.cx - sim.lastPos.x) / DT * .2; sim.lastPos.vy = sim.lastPos.vy * .8 + (st.cy - sim.lastPos.y) / DT * .2; sim.lastPos.x = st.cx; sim.lastPos.y = st.cy; sim.lastPos.h = st.hpx; }
+  else sim.lastPos = { x: st.cx, y: st.cy, vx: 0, vy: 0, h: st.hpx };
+}
+function switchTo(sim, c, why) {
+  const prev = sim.cur;
+  sim.cur = c.id; sim.curRole = c.role; sim.pendId = null; sim.pendN = 0; sim.lostN = 0; sim.kTrust = 1;
+  sim.est = { D: c.measD, v: 0 };
+  sim.lastPos = { x: c.st.cx, y: c.st.cy, vx: 0, vy: 0, h: c.st.hpx };
+  if (prev) sim.switches++;
+  addLog(sim, prev ? `${nmOf(sim, prev)} → ${nmOf(sim, c.id)}（${why}）` : `${nmOf(sim, c.id)} を選択（${why}）`, c.role === 'athlete' ? 'ok' : 'bad');
+}
+function addLog(sim, msg, kind) { sim.log.push({ t: sim.frame * DT, msg, kind }); }
+function pickUnderAF(sim, elig) {
+  const ax = sim.cfg.af.u * W, ay = sim.cfg.af.v * H;
+  let pick = null, bd = 1e9;
+  for (const c of elig) {
+    const [x0, y0, x1, y1] = c.st.box;
+    const inside = ax >= x0 && ax <= x1 && ay >= y0 && ay <= y1;
+    const d = (inside ? 0 : 1e4) + Math.hypot(c.st.cx - ax, c.st.cy - ay) - c.measD * 1000;
+    if (d < bd) { bd = d; pick = c; }
+  }
+  return pick;
+}
+
+// 汎用：前回までの総合スコア
+function genericStep(sim, cands, elig, curC, w, wsum) {
+  const s = SENS3;
+  if (sim.cur) {
+    const noK = c => c.score - w.K * c.f.K / wsum;
+    const better = curC && elig.some(c => c.id !== sim.cur && noK(c) > noK(curC));
+    sim.kTrust = better ? Math.max(0, sim.kTrust - DT) : Math.min(1, sim.kTrust + DT / .5);
+  }
+  const best = elig[0];
+  if (!sim.cur) { if (sim.frame >= 8 && best) switchTo(sim, best, '画面全体からいちばんスコアの高い人物'); return; }
+  if (!curC) {
+    sim.lostN++;
+    if (sim.lostN === 1) addLog(sim, `${nmOf(sim, sim.cur)} を見失った`, 'warn');
+    if (sim.lostN > s.hold && best) switchTo(sim, best, '見失ったので乗り移り');
+    return;
+  }
+  sim.lostN = 0; updLast(sim, curC.st);
+  if (best && best.id !== sim.cur && best.score > curC.score + s.margin) {
+    if (sim.pendId === best.id) sim.pendN++; else { sim.pendId = best.id; sim.pendN = 1; }
+    if (sim.pendN >= s.confirm) switchTo(sim, best, 'スコアが上');
+  } else { sim.pendId = null; sim.pendN = 0; }
+}
+// 100m・競泳：先頭の選手を追う（key が大きいほど先頭。sign で向きを決める）
+function leaderStep(sim, elig, curC, key, sign, margin, why) {
+  if (!elig.length) { if (sim.cur && !curC) sim.lostN++; return; }
+  const lead = elig.reduce((a, b) => sign * key(a) >= sign * key(b) ? a : b);
+  if (!sim.cur || (!curC && ++sim.lostN > 12)) { switchTo(sim, lead, sim.cur ? '見失ったので先頭の選手へ' : why); return; }
+  if (!curC) return;
+  if (sim.lostN > 0) sim.lostN = 0;
+  updLast(sim, curC.st);
+  if (lead.id !== curC.id && sign * (key(lead) - key(curC)) > margin) {
+    if (sim.pendId === lead.id) sim.pendN++; else { sim.pendId = lead.id; sim.pendN = 1; }
+    if (sim.pendN >= 15) switchTo(sim, lead, '先頭が入れ替わった');
+  } else { sim.pendId = null; sim.pendN = 0; }
+}
+// サッカー：AF 点の選手を追い、見失ったら最後の位置に近い選手へ
+function fieldStep(sim, elig, curC) {
+  if (!sim.cur) { if (sim.frame >= 8) { const p = pickUnderAF(sim, elig); if (p) switchTo(sim, p, 'AF 点の下の選手'); } return; }
+  if (curC) { sim.lostN = 0; updLast(sim, curC.st); return; }
+  sim.lostN++;
+  if (sim.lostN === 1) addLog(sim, `${nmOf(sim, sim.cur)} を見失った（ピントを保持）`, 'warn');
+  if (sim.lostN > 30 && sim.lastPos && elig.length) {
+    const lp = sim.lastPos;
+    const near = elig.reduce((a, b) => Math.hypot(a.st.cx - lp.x, a.st.cy - lp.y) <= Math.hypot(b.st.cx - lp.x, b.st.cy - lp.y) ? a : b);
+    switchTo(sim, near, '見失った位置に近い選手');
+  }
+}
+// 相撲：組み合った 2 人をひとまとまりとして追う
+function sumoStep(sim, elig, curC) {
+  const faceScore = c => c.f.E + .5 * c.f.F + .3 * c.f.V;
+  const partnerOf = c => { let pb = null, pd = .9; for (const o of elig) { if (o.id === c.id) continue; const d = Math.hypot(o.Xe - c.Xe, o.Ze - c.Ze); if (d < pd) { pd = d; pb = o; } } return pb; };
+  if (!sim.cur) { if (sim.frame >= 8) { const p = pickUnderAF(sim, elig); if (p) switchTo(sim, p, '半押しで AF 点の下の人物'); } return; }
+  if (curC) {
+    sim.lostN = 0; updLast(sim, curC.st);
+    const pt = partnerOf(curC);
+    if (pt) {
+      sim.partner = pt.id; sim.pairF = sim.frame;
+      if (curC.st.vis < .35 && pt.st.vis > curC.st.vis) { switchTo(sim, pt, '組んでいる相手へ（陰に入ったため）'); return; }
+      if (faceScore(pt) > faceScore(curC) + .3) { if (sim.pendId === pt.id) sim.pendN++; else { sim.pendId = pt.id; sim.pendN = 1; } if (sim.pendN >= 6) switchTo(sim, pt, '相手のほうが顔がよく見える'); }
+      else { sim.pendId = null; sim.pendN = 0; }
+    }
+    return;
+  }
+  sim.lostN++;
+  const recent = sim.partner && sim.frame - (sim.pairF || -99) < 30 ? elig.find(c => c.id === sim.partner) : null;
+  if (recent) { switchTo(sim, recent, '組んでいた相手へ'); return; }
+  if (sim.lostN > 60 && elig.length) switchTo(sim, elig[0], '1 秒見つからず選び直し');
+}
+
+function metrics(sim) {
+  const h = sim.hist, n = h.cur.length || 1;
+  let off = 0, fan = 0, an = 0, fa = 0, none = 0;
+  for (let i = 0; i < h.cur.length; i++) {
+    const r = h.role[i];
+    if (r === 'official') off++; else if (r === 'fan') fan++; else if (!r) none++;
+    if (h.anyA[i]) { an++; if (h.focusA[i]) fa++; }
+  }
+  return { focus: an ? fa / an : NaN, official: off / n, fan: fan / n, none: none / n, decided: sim.cls.decided, decidedT: sim.cls.decidedT, correct: sim.cls.decided === sim.scene.key };
+}
+function runAll(cfg) { const sim = makeSim(cfg, 5150 + cfg.scene); while (!sim.done) stepSim(sim); return metrics(sim); }
+// CORE-END
+
+</script>
+<script>
+// ———— 描画と UI
+const $ = id => document.getElementById(id);
+const vf = $('vf'), ctx = vf.getContext('2d');
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const PAL = ['--c1', '--c2', '--c3', '--c4', '--c5', '--c6'];
+const MODES = [
+  ['auto', '自動判別', '画面から競技を判別し、その競技のルールで追う相手を決めます。判別が終わるまでの約 0.2 秒は誰も選びません。'],
+  ['generic', '汎用', '競技を知らないカメラ。画面全体からいちばんスコアの高い人物を選び、じっと座って密集している観客だけを外します（前回までの「総合スコア」）。'],
+  ['track', '100m 走で固定', '判別を使わず、最初から 100m 走のルールを当てはめます。'],
+  ['pool', '競泳で固定', '判別を使わず、最初から競泳のルールを当てはめます。'],
+  ['field', 'サッカーで固定', '判別を使わず、最初からサッカーのルールを当てはめます。'],
+  ['sumo', '相撲で固定', '判別を使わず、最初から相撲のルールを当てはめます。']
+];
+const cfg = { scene: 0, mode: 'auto', follow: 'af', fnoIdx: SCENES[0].fno, af: { ...SCENES[0].af }, cues: { color: true, lines: true, motion: true, pose: true } };
+let sim = null, playing = true, rate = 1, acc = 0, lastTs = null, logShown = 0, lastScoreF = -99, lastChartF = -99;
+
+function colOf(id) {
+  const d = sim.byId[id];
+  if (!d) return css('--c7');
+  if (d.role === 'official') return css('--bad');
+  if (d.role === 'fan') return css('--c7');
+  const i = sim.scene.dyn.findIndex(x => x.id === id);
+  return css(PAL[i % PAL.length]);
+}
+const FILTER_OK = (() => { try { const c = document.createElement('canvas').getContext('2d'); c.filter = 'blur(2px)'; return c.filter === 'blur(2px)'; } catch (e) { return false; } })();
+function blurDraw(c, r, img) {
+  if (r < .35) { c.drawImage(img, 0, 0); return; }
+  if (FILTER_OK) { c.save(); c.filter = `blur(${r.toFixed(2)}px)`; c.drawImage(img, 0, 0); c.restore(); return; }
+  const k = Math.max(1, r / 1.2); const sm = document.createElement('canvas'); sm.width = Math.ceil(W / k); sm.height = Math.ceil(H / k); sm.getContext('2d').drawImage(img, 0, 0, sm.width, sm.height); c.drawImage(sm, 0, 0, W, H);
+}
+function withBlur(c, b, draw) {
+  const r = Math.min(b / 2.2, 24);
+  if (r < .35) { draw(c); return; }
+  if (FILTER_OK) { c.save(); c.filter = `blur(${r.toFixed(2)}px)`; draw(c); c.restore(); return; }
+  c.save(); c.globalAlpha = .45; draw(c);
+  for (let i = 0; i < 6; i++) { c.save(); c.translate(Math.cos(i * Math.PI / 3) * r * .7, Math.sin(i * Math.PI / 3) * r * .7); c.globalAlpha = .26; draw(c); c.restore(); }
+  c.restore();
+}
+function ell(c, x, y, rx, ry, rot) { c.beginPath(); c.ellipse(x, y, Math.max(rx, .1), Math.max(ry, .1), rot || 0, 0, Math.PI * 2); c.fill(); }
+// カメラ座標に直して、カメラの後ろに回る部分を切り落としてから描く
+function camXYZ(c, X, Y, Z) { const x1 = X * c.cy - Z * c.sy, z1 = X * c.sy + Z * c.cy, yy = Y - c.Hc; return [x1, yy * c.cp + z1 * c.sp, z1 * c.cp - yy * c.sp]; }
+function poly(c, cam, pts, fill) {
+  const NZ = .3;
+  let P = pts.map(([X, Y, Z]) => camXYZ(cam, X, Y, Z)), out = [];
+  for (let i = 0; i < P.length; i++) {
+    const a = P[i], b = P[(i + 1) % P.length], ai = a[2] >= NZ, bi = b[2] >= NZ;
+    if (ai) out.push(a);
+    if (ai !== bi) { const t = (NZ - a[2]) / (b[2] - a[2]); out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, NZ]); }
+  }
+  if (out.length < 3) return;
+  c.beginPath(); out.forEach(([x1, yc, zc], i) => { const x = W / 2 + cam.F * x1 / zc, y = H / 2 - cam.F * yc / zc; i ? c.lineTo(x, y) : c.moveTo(x, y); }); c.closePath(); c.fillStyle = fill; c.fill();
+}
+function line3(c, cam, a, b, col, w) { const p = project(cam, ...a), q = project(cam, ...b); if (p.zc < .5 || q.zc < .5) return; c.strokeStyle = col; c.lineWidth = w; c.beginPath(); c.moveTo(p.x, p.y); c.lineTo(q.x, q.y); c.stroke(); }
+
+// ——— 人物の描画
+function drawStand(c, st) {
+  const d = st.def, x = st.cx, top = st.top, hh = st.hh, dd = st.dir, t = sim.t;
+  const look = d.look || { top: d.shirt || '#888', bottom: '#333' };
+  const side = st.view === 'side', wv = side ? .085 : .13;
+  c.lineCap = 'round';
+  const legW = Math.max(2, .075 * hh), armW = Math.max(1.5, .05 * hh);
+  const hipY = top + .5 * hh, footY = top + hh;
+  const run = st.pose === 'run';
+  const swing = run ? Math.sin(t * 2 * Math.PI * (d.body === 'stand' && d.role === 'athlete' && sim.scene.key === 'track' ? 4.2 : 2.6) + d.id.length * 1.7 + (d.num || 0)) * .14 * hh : 0;
+  c.strokeStyle = d.skin; c.lineWidth = legW; c.beginPath();
+  if (side) { c.moveTo(x, hipY); c.lineTo(x + swing * dd, footY); c.moveTo(x, hipY); c.lineTo(x - swing * dd, footY); }
+  else { c.moveTo(x - .045 * hh, hipY); c.lineTo(x - .05 * hh, footY - Math.max(0, swing) * .4); c.moveTo(x + .045 * hh, hipY); c.lineTo(x + .05 * hh, footY - Math.max(0, -swing) * .4); }
+  c.stroke();
+  c.fillStyle = look.bottom; c.fillRect(x - wv * hh, top + .46 * hh, wv * 2 * hh, d.role === 'official' && d.body === 'stand' && sim.scene.key !== 'field' ? .54 * hh : .14 * hh);
+  c.strokeStyle = d.role === 'official' && sim.scene.key !== 'field' ? look.top : d.skin; c.lineWidth = armW; const shY = top + .19 * hh; c.beginPath();
+  if (side) { c.moveTo(x, shY); c.lineTo(x - swing * dd * .8, shY + .28 * hh); }
+  else { c.moveTo(x - wv * hh * .9, shY); c.lineTo(x - (wv + .05) * hh - swing * .25, shY + .3 * hh); c.moveTo(x + wv * hh * .9, shY); c.lineTo(x + (wv + .05) * hh + swing * .25, shY + .3 * hh); }
+  c.stroke();
+  if (d.flag) { c.strokeStyle = '#333'; c.lineWidth = Math.max(1, .012 * hh); c.beginPath(); c.moveTo(x + (wv + .05) * hh, shY + .3 * hh); c.lineTo(x + (wv + .12) * hh, shY - .05 * hh); c.stroke(); c.fillStyle = '#d23c3c'; c.fillRect(x + (wv + .12) * hh, shY - .05 * hh, .1 * hh, .07 * hh); }
+  c.fillStyle = look.top; c.beginPath();
+  if (c.roundRect) c.roundRect(x - wv * hh, top + .15 * hh, wv * 2 * hh, .34 * hh, .04 * hh); else c.rect(x - wv * hh, top + .15 * hh, wv * 2 * hh, .34 * hh);
+  c.fill();
+  if (d.bib && st.view !== 'side' && st.view !== 'back') { c.fillStyle = '#f7f7f7'; c.fillRect(x - .07 * hh, top + .27 * hh, .14 * hh, .09 * hh); c.fillStyle = '#222'; c.font = `700 ${Math.max(5, Math.round(.065 * hh))}px "Barlow Semi Condensed", sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(d.bib, x, top + .315 * hh); c.textAlign = 'left'; }
+  if (d.num && st.view !== 'side') { c.fillStyle = look.top === '#f2f4f6' ? '#1f1f24' : '#ffffff'; c.font = `700 ${Math.max(5, Math.round(.12 * hh))}px "Barlow Semi Condensed", sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(String(d.num), x, top + .31 * hh); c.textAlign = 'left'; }
+  if (d.role === 'official' && sim.scene.key !== 'field') { c.fillStyle = '#f4f4f4'; c.beginPath(); c.moveTo(x - .04 * hh, top + .15 * hh); c.lineTo(x, top + .26 * hh); c.lineTo(x + .04 * hh, top + .15 * hh); c.fill(); }
+  const hy = top + .07 * hh, hr = .07 * hh;
+  c.fillStyle = d.skin; ell(c, x, hy, hr * .95, hr);
+  c.fillStyle = d.cap || d.hair;
+  if (st.view === 'back') ell(c, x, hy - .05 * hr, hr, hr * .98);
+  else if (side) ell(c, x - dd * .25 * hr, hy - .45 * hr, hr * .85, hr * .6);
+  else ell(c, x, hy - .55 * hr, hr * .95, hr * .5);
+  if (st.view === 'front') { c.fillStyle = '#1a1412'; ell(c, x - .38 * hr, hy + .05 * hr, .11 * hr, .13 * hr); ell(c, x + .38 * hr, hy + .05 * hr, .11 * hr, .13 * hr); }
+  else if (side) { c.fillStyle = '#1a1412'; ell(c, x + dd * .5 * hr, hy + .02 * hr, .1 * hr, .12 * hr); }
+}
+function drawSeated(c, st) {
+  const f = st.def, x = st.cx, top = st.top, hh = st.hh;
+  if (f.body === 'stand') { drawStand(c, st); return; }
+  const hr = .1 * hh, hy = top + .11 * hh;
+  c.fillStyle = f.shirt;
+  const bw = (st.view === 'side' ? .15 : .22) * hh;
+  c.beginPath(); if (c.roundRect) c.roundRect(x - bw, top + .22 * hh, bw * 2, .78 * hh, .08 * hh); else c.rect(x - bw, top + .22 * hh, bw * 2, .78 * hh); c.fill();
+  c.fillStyle = f.skin; ell(c, x, hy, hr * .92, hr);
+  c.fillStyle = f.hair;
+  if (st.view === 'back') ell(c, x, hy, hr, hr);
+  else if (st.view === 'side') ell(c, x - st.dir * .25 * hr, hy - .45 * hr, hr * .85, hr * .6);
+  else ell(c, x, hy - .55 * hr, hr * .95, hr * .5);
+  if (st.view !== 'back') {
+    c.fillStyle = '#1a1412';
+    if (st.view === 'front') { ell(c, x - .36 * hr, hy + .05 * hr, .12 * hr, .14 * hr); ell(c, x + .36 * hr, hy + .05 * hr, .12 * hr, .14 * hr); }
+    else ell(c, x + st.dir * .5 * hr, hy + .02 * hr, .12 * hr, .14 * hr);
+  }
+}
+function drawSwimmer(c, st) {
+  const d = st.def, x = st.cx, top = st.top, hh = st.hh, dd = st.dir;
+  const hx = st.headX, hy = st.headY, hr = st.headR;
+  const ph = st.stroke || 0, up = Math.max(0, Math.sin(ph));
+  // 水しぶき
+  c.fillStyle = 'rgba(255,255,255,.75)';
+  ell(c, x, top + .9 * hh, (1.0 + .4 * up) * hh, .16 * hh);
+  ell(c, x - dd * .9 * hh, top + .88 * hh, .4 * hh, .1 * hh);
+  // 肩と腕
+  c.fillStyle = d.skin; ell(c, x - dd * .1 * hh, top + .8 * hh, .75 * hh, .2 * hh);
+  c.strokeStyle = d.skin; c.lineCap = 'round'; c.lineWidth = .14 * hh; c.beginPath();
+  const reach = .9 + .5 * Math.cos(ph);
+  c.moveTo(x + dd * .2 * hh, top + .82 * hh); c.lineTo(x + dd * reach * hh, top + (.88 - .1 * up) * hh); c.stroke();
+  // 頭（キャップとゴーグル）
+  c.fillStyle = d.skin; ell(c, hx, hy, hr * .95, hr);
+  c.fillStyle = d.cap; ell(c, hx - dd * .1 * hr, hy - .25 * hr, hr * .98, hr * .78);
+  if (d.cap === '#f2f2f2' || d.cap === '#e2c24a') { c.fillStyle = 'rgba(0,0,0,.15)'; ell(c, hx - dd * .1 * hr, hy - .25 * hr, hr * .5, hr * .3); }
+  c.fillStyle = '#1b2a3a'; ell(c, hx + dd * .55 * hr, hy + .1 * hr, .3 * hr, .18 * hr);
+}
+function drawRikishi(c, st) {
+  const d = st.def, x = st.cx, top = st.top, hh = st.hh, dir = st.dir;
+  const side = st.view === 'side', back = st.view === 'back';
+  const lx = st.headX - x, bw = (side ? .16 : .2) * hh;
+  c.lineCap = 'round';
+  c.strokeStyle = d.skin; c.lineWidth = .1 * hh; c.beginPath();
+  const hipY = top + .58 * hh, footY = top + hh;
+  if (side) { c.moveTo(x - .02 * hh * dir, hipY); c.lineTo(x - .12 * hh * dir, footY - .03 * hh); c.moveTo(x + .03 * hh * dir, hipY); c.lineTo(x + .1 * hh * dir, footY - .03 * hh); }
+  else { c.moveTo(x - .08 * hh, hipY); c.lineTo(x - .13 * hh, footY - .03 * hh); c.moveTo(x + .08 * hh, hipY); c.lineTo(x + .13 * hh, footY - .03 * hh); }
+  c.stroke();
+  c.fillStyle = d.skin; ell(c, x + lx * .45, top + .38 * hh, bw, .22 * hh);
+  c.fillStyle = d.col; c.fillRect(x - bw * .95, top + .52 * hh, bw * 1.9, .1 * hh);
+  c.strokeStyle = d.skin; c.lineWidth = .065 * hh; c.beginPath();
+  const shY = top + .24 * hh;
+  if (st.pose === 'shikiri') { c.moveTo(x + (side ? dir * .05 * hh : -.15 * hh), shY); c.lineTo(x + (side ? dir * .14 * hh : -.18 * hh), footY - .05 * hh); }
+  else if (side) { c.moveTo(x + dir * .05 * hh, shY); c.lineTo(x + dir * .3 * hh, shY + .1 * hh); }
+  else { c.moveTo(x - bw * .9, shY); c.lineTo(x - bw * 1.1, shY + .2 * hh); c.moveTo(x + bw * .9, shY); c.lineTo(x + bw * 1.1, shY + .2 * hh); }
+  c.stroke();
+  const hx = st.headX, hy = st.headY, hr = st.headR;
+  c.fillStyle = d.skin; ell(c, hx, hy, hr * .95, hr);
+  c.fillStyle = d.hair;
+  if (back) ell(c, hx, hy - .1 * hr, hr * .95, hr * .85); else ell(c, hx - (side ? dir * .2 * hr : 0), hy - .5 * hr, hr * .9, hr * .5);
+  ell(c, hx - (side ? dir * .35 * hr : 0), hy - 1.0 * hr, hr * .38, hr * .22);
+  if (!back && !st.faceDown) { c.fillStyle = '#1a1412'; if (side) ell(c, hx + dir * .5 * hr, hy + .05 * hr, .1 * hr, .12 * hr); else { ell(c, hx - .36 * hr, hy + .05 * hr, .11 * hr, .13 * hr); ell(c, hx + .36 * hr, hy + .05 * hr, .11 * hr, .13 * hr); } }
+}
+function drawGyoji(c, st) {
+  const d = st.def, x = st.cx, top = st.top, hh = st.hh, dir = st.dir, side = st.view === 'side';
+  const hatH = .12 * hh, body = top + hatH, bh = hh - hatH;
+  c.fillStyle = '#5a3a6a'; c.beginPath(); c.moveTo(x - .1 * hh, body + .48 * bh); c.lineTo(x + .1 * hh, body + .48 * bh); c.lineTo(x + .15 * hh, body + .97 * bh); c.lineTo(x - .15 * hh, body + .97 * bh); c.closePath(); c.fill();
+  c.fillStyle = d.col; c.fillRect(x - .12 * hh, body + .14 * bh, .24 * hh, .38 * bh);
+  c.fillStyle = 'rgba(232,196,90,.85)'; for (let i = 0; i < 4; i++) ell(c, x - .06 * hh + (i % 2) * .12 * hh, body + (.22 + .1 * Math.floor(i / 2)) * bh, .022 * hh, .022 * hh);
+  const sx = side ? dir : 1;
+  c.fillStyle = '#2a1a12'; ell(c, x + sx * .32 * hh, body + .16 * bh, .06 * hh, .075 * hh, .3 * sx);
+  const hx = st.headX, hy = body + .07 * bh, hr = .075 * hh;
+  c.fillStyle = d.skin; ell(c, hx, hy, hr * .9, hr);
+  c.fillStyle = '#141414'; c.beginPath(); c.moveTo(hx - hr * .9, hy - .5 * hr); c.lineTo(hx + hr * .9, hy - .5 * hr); c.lineTo(hx + hr * .5, top); c.lineTo(hx - hr * .6, top + .02 * hh); c.closePath(); c.fill();
+  if (st.view !== 'back') { c.fillStyle = '#1a1412'; if (side) ell(c, hx + dir * .45 * hr, hy + .05 * hr, .1 * hr, .12 * hr); else { ell(c, hx - .35 * hr, hy + .05 * hr, .1 * hr, .12 * hr); ell(c, hx + .35 * hr, hy + .05 * hr, .1 * hr, .12 * hr); } }
+}
+function drawPerson(c, st) {
+  const b = st.def.body;
+  if (b === 'swim') drawSwimmer(c, st); else if (b === 'rikishi') drawRikishi(c, st); else if (b === 'gyoji') drawGyoji(c, st); else if (b === 'seated') drawSeated(c, st); else drawStand(c, st);
+}
+
+// ——— 背景（奥の層：空・建物・スタンドと観客）と地面の層
+function drawBackdrop(c, cam, sc) {
+  const g = c.createLinearGradient(0, 0, 0, H);
+  if (sc.key === 'track') {
+    g.addColorStop(0, '#b8cfe0'); g.addColorStop(1, '#dfe7ea'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+    const r = rngFrom(3);
+    for (let i = 0; i < 26; i++) { const X = -60 + r() * 120, Z = 170 + r() * 60, h = 4 + r() * 8; const p = project(cam, X, h, Z), q = project(cam, X, 0, Z); c.fillStyle = ['#7d8a7a', '#8f8a80', '#a49a8a', '#6f7a6a'][i % 4]; c.fillRect(p.x - 30, p.y, 60 + r() * 50, q.y - p.y); c.fillStyle = '#4a4f55'; c.fillRect(p.x - 34, p.y - 6, 70, 8); }
+    for (let i = 0; i < 18; i++) { const X = -50 + r() * 100, Z = 150 + r() * 20; const p = project(cam, X, 6 + r() * 4, Z); c.fillStyle = 'rgba(70,110,60,.85)'; ell(c, p.x, p.y, 30 + r() * 30, 22 + r() * 14); }
+    poly(c, cam, [[-16, 0, 130], [16, 0, 130], [16, 3.2, 137], [-16, 3.2, 137]], '#9aa3ab');
+    poly(c, cam, [[-6, 2.6, 128], [2, 2.6, 128], [2.5, 4.2, 129], [-6.5, 4.2, 129]], '#5a7ab0');
+    poly(c, cam, [[-6, 0, 128], [2, 0, 128], [2, 2.6, 128], [-6, 2.6, 128]], 'rgba(60,80,120,.35)');
+  } else if (sc.key === 'pool') {
+    g.addColorStop(0, '#2a3340'); g.addColorStop(1, '#4a5868'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+    poly(c, cam, [[-40, .6, 26.2], [60, .6, 26.2], [60, 3.4, 30], [-40, 3.4, 30]], '#3a5a8a');
+    for (let k = 0; k < 4; k++) line3(c, cam, [-40, 1.0 + .55 * k, 26.6 + k], [60, 1.0 + .55 * k, 26.6 + k], 'rgba(255,255,255,.15)', 2);
+  } else if (sc.key === 'field') {
+    g.addColorStop(0, '#9fb8cc'); g.addColorStop(.3, '#c9d6de'); g.addColorStop(1, '#c9d6de'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+    poly(c, cam, [[-30, 0, 44], [30, 0, 44], [30, 4, 52], [-30, 4, 52]], '#5a6470');
+    for (let k = 0; k < 7; k++) line3(c, cam, [-30, .5 + .5 * k, 45 + k], [30, .5 + .5 * k, 45 + k], 'rgba(255,255,255,.12)', 2);
+  } else {
+    g.addColorStop(0, '#1f1a1e'); g.addColorStop(.55, '#3a2e2a'); g.addColorStop(1, '#4a3a30'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+    for (let k = 0; k < 9; k++) { const Z = 11.25 + .85 * k, Y = k < 3 ? 0 : .35 * (k - 2); const p = project(cam, 0, Y + .05, Z), q = project(cam, 0, Y - .3, Z); c.fillStyle = k % 2 ? '#5a4436' : '#4e3b30'; c.fillRect(0, p.y - 6, W, q.y - p.y + 6); }
+    c.fillStyle = 'rgba(120,40,40,.5)'; c.fillRect(0, 0, W, 28);
+  }
+  // 観客（奥から）
+  const sts = sim.stats.filter(s => s.box[2] > -20 && s.box[0] < W + 20).sort((a, b) => b.zc - a.zc);
+  for (const st of sts) drawSeated(c, st);
+}
+function drawGround(c, cam, sc) {
+  if (sc.key === 'track') {
+    poly(c, cam, [[-60, 0, 8], [60, 0, 8], [60, 0, 126], [-60, 0, 126]], '#6f9a58');
+    poly(c, cam, [[-5.5, 0, 6], [5.5, 0, 6], [5.5, 0, 125], [-5.5, 0, 125]], '#b9553f');
+    for (let k = 0; k <= 9; k++) { const X = -5.49 + 1.22 * k; line3(c, cam, [X, 0, 6], [X, 0, 125], 'rgba(255,255,255,.85)', 1.6); }
+    line3(c, cam, [-5.5, 0, 22], [5.5, 0, 22], '#ffffff', 3); line3(c, cam, [-5.5, 0, 122], [5.5, 0, 122], '#ffffff', 2);
+  } else if (sc.key === 'pool') {
+    poly(c, cam, [[-40, 0, 23.4], [60, 0, 23.4], [60, 0, 25.6], [-40, 0, 25.6]], '#c9ccd0');
+    poly(c, cam, [[-40, 0, 8.35], [60, 0, 8.35], [60, 0, 23.4], [-40, 0, 23.4]], '#2f8fd0');
+    const r = rngFrom(9);
+    c.strokeStyle = 'rgba(255,255,255,.18)'; c.lineWidth = 1.5;
+    for (let i = 0; i < 90; i++) { const X = -40 + r() * 100, Z = 8.5 + r() * 14.8; const p = project(cam, X, 0, Z), q = project(cam, X + .8 + r(), 0, Z); if (p.zc > .5) { c.beginPath(); c.moveTo(p.x, p.y); c.lineTo(q.x, q.y); c.stroke(); } }
+    for (let k = 0; k <= 6; k++) {
+      const Z = 8.35 + 2.5 * k;
+      for (let X = -40; X < 60; X += 1) { const col = (X % 10 === 0 || X % 10 === 9) ? '#d23c3c' : k % 2 ? '#2f5fb3' : '#e2c24a'; line3(c, cam, [X, .03, Z], [X + .9, .03, Z], col, 4); }
+    }
+    poly(c, cam, [[-40, .9, 25.5], [60, .9, 25.5], [60, 0, 25.5], [-40, 0, 25.5]], '#1e2a44');
+    for (let X = -36; X < 60; X += 12) { const p = project(cam, X + 6, .45, 25.5); if (p.zc > .5 && p.x > -80 && p.x < W + 80) { c.fillStyle = '#f2f2f2'; c.font = `700 ${Math.round(.5 * cam.F / p.zc)}px "Barlow Semi Condensed", sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('AQUA SIM', p.x, p.y); c.textAlign = 'left'; } }
+    poly(c, cam, [[-40, 0, 3], [60, 0, 3], [60, 0, 8.35], [-40, 0, 8.35]], '#dfe2e5');
+  } else if (sc.key === 'field') {
+    for (let k = 0; k < 10; k++) poly(c, cam, [[-60, 0, 8 + 3.5 * k], [60, 0, 8 + 3.5 * k], [60, 0, 11.5 + 3.5 * k], [-60, 0, 11.5 + 3.5 * k]], k % 2 ? '#4f8f3f' : '#5a9c48');
+    poly(c, cam, [[-60, 0, 43], [60, 0, 43], [60, 0, 44.2], [-60, 0, 44.2]], '#4a6a3a');
+    line3(c, cam, [-60, 0, 41], [60, 0, 41], '#f4f4f4', 2.5); line3(c, cam, [3, 0, 8], [3, 0, 41], '#f4f4f4', 2.5);
+    c.strokeStyle = '#f4f4f4'; c.lineWidth = 2.5; c.beginPath();
+    for (let i = 0; i <= 64; i++) { const a = i / 64 * Math.PI * 2; const p = project(cam, 3 + 9.15 * Math.cos(a), 0, 26 + 9.15 * Math.sin(a)); i ? c.lineTo(p.x, p.y) : c.moveTo(p.x, p.y); }
+    c.stroke();
+    const cols = ['#1d6fd1', '#e8b02a', '#d23c3c', '#1a1a1a'];
+    for (let i = 0; i < 8; i++) poly(c, cam, [[-30 + 7.5 * i, 0, 42], [-22.5 + 7.5 * i, 0, 42], [-22.5 + 7.5 * i, .9, 42], [-30 + 7.5 * i, .9, 42]], cols[i % 4]);
+  } else {
+    const cz = RING.cz, T = RING.top, B = RING.base, h = RING.h;
+    poly(c, cam, [[-B, 0, cz - B], [B, 0, cz - B], [T, h, cz - T], [-T, h, cz - T]], '#9a7a54');
+    for (const s of [-1, 1]) poly(c, cam, [[s * B, 0, cz - B], [s * B, 0, cz + B], [s * T, h, cz + T], [s * T, h, cz - T]], '#8a6c4a');
+    poly(c, cam, [[-T, h, cz - T], [T, h, cz - T], [T, h, cz + T], [-T, h, cz + T]], '#d4b890');
+    c.strokeStyle = '#b89a5a'; c.lineWidth = 6; c.beginPath();
+    for (let i = 0; i <= 64; i++) { const a = i / 64 * Math.PI * 2; const p = project(cam, RING.r * Math.cos(a), h + .05, cz + RING.r * Math.sin(a)); i ? c.lineTo(p.x, p.y) : c.moveTo(p.x, p.y); }
+    c.stroke();
+    for (const sx of [-.7, .7]) line3(c, cam, [sx, h + .01, cz - .45], [sx, h + .01, cz + .45], 'rgba(255,255,255,.9)', 3);
+  }
+}
+const LAYER = { back: document.createElement('canvas'), ground: document.createElement('canvas') };
+LAYER.back.width = LAYER.ground.width = W; LAYER.back.height = LAYER.ground.height = H;
+let layerKey = null;
+const BACK_Z = { track: 133, pool: 27.5, field: 48, sumo: 13 }, GROUND_Z = { track: 45, pool: 15, field: 26, sumo: 7.6 };
+function render() {
+  const sc = sim.scene, cam = sim.cam, fno = FNOS[cfg.fnoIdx];
+  const panning = typeof sc.cam.yaw === 'function';
+  const key = sc.key + (panning ? sim.frame : '');
+  if (layerKey !== key) {
+    const bc = LAYER.back.getContext('2d'), gc = LAYER.ground.getContext('2d');
+    bc.clearRect(0, 0, W, H); gc.clearRect(0, 0, W, H);
+    drawBackdrop(bc, cam, sc); drawGround(gc, cam, sc);
+    layerKey = key;
+  }
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+  blurDraw(ctx, Math.min(blurPx(sc, fno, BACK_Z[sc.key], sim.lensD) / 2.2, 24), LAYER.back);
+  blurDraw(ctx, Math.min(blurPx(sc, fno, GROUND_Z[sc.key], sim.lensD) / 2.2 * .5, 24), LAYER.ground);
+  const order = sim.dyns.slice().sort((a, b) => b.zc - a.zc);
+  for (const st of order) {
+    if (st.box[2] < -50 || st.box[0] > W + 50) continue;
+    withBlur(ctx, blurPx(sc, fno, st.zc, sim.lensD), c => drawPerson(c, st));
+  }
+  drawOverlay();
+}
+
+function corners(x0, y0, x1, y1, len) {
+  ctx.beginPath();
+  ctx.moveTo(x0, y0 + len); ctx.lineTo(x0, y0); ctx.lineTo(x0 + len, y0);
+  ctx.moveTo(x1 - len, y0); ctx.lineTo(x1, y0); ctx.lineTo(x1, y0 + len);
+  ctx.moveTo(x1, y1 - len); ctx.lineTo(x1, y1); ctx.lineTo(x1 - len, y1);
+  ctx.moveTo(x0 + len, y1); ctx.lineTo(x0, y1); ctx.lineTo(x0, y1 - len);
+  ctx.stroke();
+}
+function clipBox(b) { return [clamp(b[0], 3, W - 3), clamp(b[1], 3, H - 3), clamp(b[2], 3, W - 3), clamp(b[3], 3, H - 3)]; }
+function label(txt, x, y, col, bold) {
+  ctx.font = `${bold ? 700 : 600} 13px "Barlow Semi Condensed", "Noto Sans JP", sans-serif`;
+  const w = ctx.measureText(txt).width + 8;
+  x = clamp(x, 2, W - w - 2); y = clamp(y, 18, H - 28);
+  ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(x, y - 16, w, 16);
+  ctx.fillStyle = col; ctx.textBaseline = 'bottom'; ctx.fillText(txt, x + 4, y - 1);
+}
+const shortNm = id => { const d = sim.byId[id]; if (!d) return id; if (d.role === 'fan') return d.label ? '待機' : '観客'; return d.name.replace(' レーン', 'L'); };
+function drawOverlay() {
+  const okC = '#3fdc84', warnC = '#ffb340', badC = '#ff5a4c';
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]);
+  const ax = cfg.af.u * W, ay = cfg.af.v * H; ctx.strokeRect(ax - 14, ay - 14, 28, 28);
+  ctx.setLineDash([]);
+  if ($('showFans').checked) for (const c of sim.cands) {
+    if (c.role !== 'fan' || c.id === sim.cur) continue;
+    const st = c.st, r = Math.max(4, st.headR * 1.25);
+    if (c.ex) { ctx.strokeStyle = 'rgba(160,230,190,.6)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(st.headX - r * .6, st.headY - r * .6); ctx.lineTo(st.headX + r * .6, st.headY + r * .6); ctx.moveTo(st.headX + r * .6, st.headY - r * .6); ctx.lineTo(st.headX - r * .6, st.headY + r * .6); ctx.stroke(); }
+    else { ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 1; ctx.strokeRect(st.headX - r, st.headY - r, r * 2, r * 2); }
+  }
+  if ($('showCands').checked) for (const c of sim.cands) {
+    if (c.role === 'fan' || c.id === sim.cur) continue;
+    const b = clipBox(c.st.box), pend = c.id === sim.pendId;
+    ctx.strokeStyle = c.ex ? 'rgba(160,230,190,.55)' : pend ? warnC : 'rgba(255,255,255,.75)'; ctx.lineWidth = pend ? 2 : 1.2;
+    corners(b[0], b[1], b[2], b[3], Math.min(12, (b[2] - b[0]) / 3));
+    label(`${shortNm(c.id)} ${Math.round(c.score * 100)}${c.ex && c.ex !== 'wait' ? ' 除外' : ''}`, b[0], b[1] - 2, c.ex ? 'rgba(160,230,190,.95)' : pend ? warnC : 'rgba(255,255,255,.9)');
+  }
+  const curS = sim.dyns.find(s => s.id === sim.cur) || sim.stats.find(s => s.id === sim.cur);
+  if (curS) {
+    const r = curS.role, col = r === 'athlete' ? (sim.status && sim.status.focusA ? okC : warnC) : badC;
+    const b = clipBox(curS.box);
+    ctx.strokeStyle = sim.lostN > 0 ? 'rgba(255,255,255,.5)' : col; ctx.lineWidth = 3;
+    corners(b[0], b[1], b[2], b[3], Math.min(18, (b[2] - b[0]) / 2.5));
+    label(`${nmOf(sim, sim.cur)}${sim.lostN > 0 ? ' 見失い中' : ''}`, b[0], b[1] - 2, col, true);
+  }
+  // 判別の表示
+  const cs = sim.cls, post = cs.post;
+  const top = CLASSES.reduce((a, b) => post[a] >= post[b] ? a : b);
+  const txt = cfg.mode === 'auto' ? (cs.decided ? `判別：${CLASS_NAME[cs.decided]} ${Math.round(post[cs.decided] * 100)}%` : `判別中… ${CLASS_NAME[top]} ${Math.round(post[top] * 100)}%`) : `ルール固定：${MODES.find(m => m[0] === cfg.mode)[1]}`;
+  ctx.font = '600 13px "Barlow Semi Condensed", "Noto Sans JP", sans-serif'; ctx.textBaseline = 'top';
+  const tw = ctx.measureText(txt).width + 12;
+  ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(8, 8, tw, 21);
+  ctx.fillStyle = cfg.mode !== 'auto' ? '#e8efe9' : !cs.decided ? '#ffd27a' : cs.decided === sim.scene.key ? '#9ff0c0' : '#ffb0a8'; ctx.fillText(txt, 14, 11);
+  ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(0, H - 26, W, 26);
+  ctx.font = '500 13px "JetBrains Mono", monospace'; ctx.fillStyle = '#e8efe9'; ctx.textBaseline = 'middle';
+  ctx.fillText(`${sim.t.toFixed(2)} s   ${sim.scene.cam.f}mm f/${FNOS[cfg.fnoIdx]}   ピント ${(1 / sim.lensD).toFixed(1)} m`, 10, H - 13);
+  const st = sim.status || {};
+  ctx.textAlign = 'right';
+  ctx.fillStyle = !sim.cur ? '#c8d0cc' : st.role === 'athlete' ? (st.focusA ? okC : warnC) : badC;
+  ctx.fillText(sim.cur ? `選択 ${nmOf(sim, sim.cur)}` : '選択なし', W - 10, H - 13);
+  ctx.textAlign = 'left';
+  ctx.restore();
+}
+
+// ——— スコア表
+function renderScores() {
+  const thead = $('scoreTbl').tHead, tb = $('scoreTbl').tBodies[0];
+  if (!thead.dataset.k) {
+    thead.dataset.k = '1';
+    thead.innerHTML = '<tr><th style="text-align:left">人物</th>' + FEATS.map(([k, n]) => `<th>${n}</th>`).join('') + '<th style="text-align:left">合計</th><th style="text-align:left">カメラの推定・判定</th></tr>';
+  }
+  const rows = [];
+  const dc = sim.cands.filter(c => c.role !== 'fan');
+  const shown = new Set();
+  for (const c of dc) { shown.add(c.id); rows.push(rowHtml(c)); }
+  for (const st of sim.dyns) if (!shown.has(st.id)) rows.push(`<tr class="miss"><td class="name"><i style="background:${colOf(st.id)}"></i>${nmOf(sim, st.id)}${tags(st.id)}</td><td colspan="${FEATS.length + 2}" style="text-align:left">${st.vis < .2 ? '隠れている・画面外' : '検出されず'}</td></tr>`);
+  const fc = sim.cands.filter(c => c.role === 'fan');
+  const topF = fc.slice(0, 3);
+  if (sim.cur && sim.byId[sim.cur].role === 'fan') { const c = fc.find(x => x.id === sim.cur); if (c && !topF.includes(c)) topF.unshift(c); }
+  for (const c of topF) rows.push(rowHtml(c));
+  const exN = fc.filter(c => c.ex && c.ex !== 'wait').length;
+  rows.push(`<tr class="sum"><td colspan="${FEATS.length + 3}">観客・待機中の人 ${sim.scene.stat.length} 人のうち検出 ${fc.length} 人、ルールで除外 ${exN} 人</td></tr>`);
+  tb.innerHTML = rows.join('');
+  $('scoreState').textContent = !sim.prof ? '判別中（まだ選ばない）' : sim.lostN > 0 ? `${nmOf(sim, sim.cur)} 見失い ${sim.lostN} コマ` : sim.cur ? `${nmOf(sim, sim.cur)} を追跡中` : '—';
+}
+function tags(id) { let t = ''; if (id === sim.cur) t += '<span class="tag sel">選択</span>'; if (id === sim.pendId) t += '<span class="tag pend">待ち</span>'; return t; }
+function rowHtml(c) {
+  const bad = c.role !== 'athlete';
+  const nm = nmOf(sim, c.id);
+  let h = `<tr class="${c.id === sim.cur ? 'sel' : ''} ${bad ? 'fan' : ''} ${c.ex && c.ex !== 'wait' ? 'ex' : ''}"><td class="name"><i style="background:${colOf(c.id)}"></i>${bad ? `<span class="fanword">${nm}</span>` : nm}${tags(c.id)}</td>`;
+  for (const [k] of FEATS) { const v = c.f[k]; h += `<td class="f" style="--v:${v.toFixed(2)}">${Math.round(v * 100)}</td>`; }
+  h += `<td class="tot">${Math.round(c.score * 100)}<div class="bar" style="width:${Math.round(c.score * 100)}%;background:${colOf(c.id)}"></div></td>`;
+  const sp = c.mot ? `${Math.hypot(c.mot.vx, c.mot.vz).toFixed(1)} m/s` : '—';
+  const est = `横 ${c.Xe.toFixed(1)}・奥 ${c.Ze.toFixed(1)}・頭 ${c.topE.toFixed(1)} m・${sp}`;
+  const why = c.ex ? (c.ex === 'wait' ? '判別待ち' : `<span class="ex-gate">除外：${EX_TEXT[c.ex]}</span>`) : '候補';
+  h += `<td class="judge">${est}　${why}</td></tr>`;
+  return h;
+}
+
+// ——— グラフ・判別バー・配置図
+const tl = $('tl'), tctx = tl.getContext('2d');
+const mapc = $('map'), mctx = mapc.getContext('2d');
+function sizeCanvases() {
+  const dpr = window.devicePixelRatio || 1;
+  for (const [cv, c, h] of [[tl, tctx, 290], [mapc, mctx, 300]]) { const w = cv.clientWidth; cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); cv.style.height = h + 'px'; c.setTransform(dpr, 0, 0, dpr, 0, 0); }
+}
+const RANGE = { track: [8, 140], pool: [6, 30], field: [12, 60], sumo: [3.5, 16] };
+const TICKS = { track: [10, 20, 40, 70, 100, 140], pool: [6, 8, 10, 15, 20, 30], field: [12, 15, 20, 30, 45, 60], sumo: [4, 5, 6, 8, 10, 12, 16] };
+const CLS_COL = { track: '--c2', pool: '--c1', field: '--c6', sumo: '--c3' };
+function renderChart() {
+  const sc = sim.scene, w = tl.clientWidth, L = 46, R = 10, T = 8, PH = 170, SH = 14, G = 5;
+  tctx.clearRect(0, 0, w, 290);
+  const ink = css('--ink'), muted = css('--muted'), line = css('--line'), acc = css('--accent'), warn = css('--warn'), bad = css('--bad'), sunk = css('--sunk');
+  const X = f => L + (w - L - R) * f / (DUR * FPS);
+  const [r0, r1] = RANGE[sc.key], lo = Math.log(r0), hi = Math.log(r1);
+  const Y = m => T + PH * (1 - (Math.log(clamp(m, r0, r1)) - lo) / (hi - lo));
+  tctx.font = '12px "Noto Sans JP", sans-serif'; tctx.textBaseline = 'middle';
+  tctx.strokeStyle = line; tctx.lineWidth = 1;
+  for (const m of TICKS[sc.key]) { tctx.beginPath(); tctx.moveTo(L, Y(m)); tctx.lineTo(w - R, Y(m)); tctx.stroke(); tctx.fillStyle = muted; tctx.textAlign = 'right'; tctx.fillText(`${m}`, L - 6, Y(m)); }
+  const hs = sim.hist, n = hs.cur.length;
+  const nA = sc.dyn.filter(d => d.role === 'athlete').length, nO = sc.dyn.filter(d => d.role === 'official').length;
+  for (let a = 0; a < nA; a++) {
+    tctx.strokeStyle = css(PAL[a % PAL.length]); tctx.lineWidth = 1.2; tctx.beginPath();
+    for (let i = 0; i < n; i++) { const v = hs.zA[i][a]; i ? tctx.lineTo(X(i), Y(v)) : tctx.moveTo(X(i), Y(v)); }
+    tctx.stroke();
+  }
+  tctx.setLineDash([4, 3]);
+  for (let o = 0; o < nO; o++) { tctx.strokeStyle = bad; tctx.lineWidth = 1.4; tctx.beginPath(); for (let i = 0; i < n; i++) { const v = hs.zO[i][o]; i ? tctx.lineTo(X(i), Y(v)) : tctx.moveTo(X(i), Y(v)); } tctx.stroke(); }
+  tctx.setLineDash([]);
+  tctx.strokeStyle = css('--focus'); tctx.lineWidth = 2.2; tctx.beginPath(); for (let i = 0; i < n; i++) { const v = 1 / hs.lens[i]; i ? tctx.lineTo(X(i), Y(v)) : tctx.moveTo(X(i), Y(v)); } tctx.stroke();
+  const rows = [
+    ['判別', i => hs.prof[i] ? (hs.prof[i] === 'generic' ? muted : css(CLS_COL[hs.prof[i]])) : null],
+    ['選択', i => { const r = hs.role[i]; return !r ? null : r === 'athlete' ? acc : bad; }],
+    ['ピント', i => hs.focusA[i] ? acc : hs.hold[i] ? sunk : warn]
+  ];
+  rows.forEach(([nm, fn], r) => {
+    const y0 = T + PH + 12 + r * (SH + G);
+    tctx.fillStyle = muted; tctx.textAlign = 'right'; tctx.fillText(nm, L - 6, y0 + SH / 2);
+    tctx.fillStyle = sunk; tctx.fillRect(L, y0, w - L - R, SH);
+    let s0 = 0, col = n ? fn(0) : null;
+    for (let i = 1; i <= n; i++) { const c2 = i < n ? fn(i) : '__'; if (c2 !== col) { if (col) { tctx.fillStyle = col; tctx.fillRect(X(s0), y0, X(i) - X(s0) + .5, SH); } s0 = i; col = c2; } }
+  });
+  tctx.fillStyle = muted; tctx.textAlign = 'center';
+  const ty = T + PH + 12 + 3 * (SH + G) + 6;
+  for (let s = 0; s <= DUR; s += 2) tctx.fillText(`${s}s`, X(s * FPS), ty);
+  if (!sim.done) { tctx.strokeStyle = ink; tctx.lineWidth = 1; tctx.beginPath(); tctx.moveTo(X(sim.frame), T); tctx.lineTo(X(sim.frame), ty - 8); tctx.stroke(); }
+}
+function renderCls() {
+  const cs = sim.cls, post = cs.post;
+  $('clsBars').innerHTML = CLASSES.map(k => `<div class="barrow ${cs.decided === k ? 'on' : ''}"><span>${CLASS_NAME[k]}${k === sim.scene.key ? '<small>（正解）</small>' : ''}</span><div class="track"><div style="width:${(post[k] * 100).toFixed(1)}%;background:var(${CLS_COL[k]})"></div></div><b>${Math.round(post[k] * 100)}%</b></div>`).join('');
+  const f = cs.feat || {};
+  const v = a => a ? a.map(x => Math.round(x * 100)).join(' / ') : '使わない';
+  const p = x => x === undefined ? '—' : `${Math.round(x * 100)}%`;
+  $('clsFeat').innerHTML = `<span>色（赤茶/青/緑/砂ほか）</span><b>${v(f.G)}</b><span>線（収束/横/白線/円）</span><b>${v(f.L)}</b><span>動く人の奥行き割合・向きのそろい</span><b>${p(f.D)}・${p(f.C)}（${f.movers || 0} 人）</b><span>体が短い人・組み合う人</span><b>${p(f.S)}・${p(f.K)}</b>`;
+  $('clsState').textContent = cfg.mode !== 'auto' ? '（固定ルール中も判別は動いています）' : cs.decided ? `${CLASS_NAME[cs.decided]}（${cs.decidedT.toFixed(2)} 秒で確定）` : '判別中…';
+  const prof = sim.prof;
+  const fol = (prof === 'track' || prof === 'pool') && cfg.follow === 'lead' ? `追うのは先頭の選手（${prof === 'track' ? '1 m' : '0.4 m'} 以上前に出た選手が 0.25 秒続けば乗り換え）。`
+    : prof === 'track' || prof === 'pool' || prof === 'field' ? 'AF 点の下の選手から追い始め、その選手を追い続ける。見失ったら 0.5 秒待って、最後に見えた位置に近い選手へ。' : '';
+  $('ruleText').textContent = prof ? PROFILES[prof].rule + fol : '判別が終わるまで、誰も選ばずに待っています。';
+}
+const MAPB = { track: [-9, 9, 0, 140], pool: [-14, 30, 0, 30], field: [-12, 12, 0, 52], sumo: [-5, 5, 0, 17] };
+function renderMap() {
+  const sc = sim.scene, w = mapc.clientWidth, h = 300;
+  mctx.clearRect(0, 0, w, h);
+  const muted = css('--muted'), line = css('--line'), focus = css('--focus'), sunk = css('--sunk'), bad = css('--bad'), ink = css('--ink');
+  const [x0, x1, z0, z1] = MAPB[sc.key];
+  // 100m は奥行きが長いので縦横の縮尺を変える
+  const sx = (w - 16) / (x1 - x0), sz = (h - 16) / (z1 - z0);
+  const MX = X => 8 + (X - x0) * sx, MY = Z => h - 8 - (Z - z0) * sz;
+  const cam = sim.cam, k = (W / 2) / cam.F;
+  const dirs = [[-k, 1], [k, 1]].map(([a, b]) => { const yaw = cam.yaw; return [a * Math.cos(yaw) + b * Math.sin(yaw), -a * Math.sin(yaw) + b * Math.cos(yaw)]; });
+  mctx.fillStyle = sunk; mctx.beginPath(); mctx.moveTo(MX(0), MY(0)); for (const [dx, dz] of dirs) mctx.lineTo(MX(dx * 200), MY(dz * 200)); mctx.closePath(); mctx.fill();
+  mctx.strokeStyle = muted; mctx.lineWidth = 1;
+  if (sc.key === 'track') { mctx.strokeRect(MX(-5.5), MY(125), 11 * sx, 119 * sz); for (const Z of [22, 122]) { mctx.beginPath(); mctx.moveTo(MX(-5.5), MY(Z)); mctx.lineTo(MX(5.5), MY(Z)); mctx.stroke(); } }
+  if (sc.key === 'pool') { mctx.strokeRect(MX(-14), MY(23.4), 44 * sx, 15.05 * sz); }
+  if (sc.key === 'field') { mctx.beginPath(); mctx.moveTo(MX(-12), MY(41)); mctx.lineTo(MX(12), MY(41)); mctx.moveTo(MX(3), MY(8)); mctx.lineTo(MX(3), MY(41)); mctx.stroke(); }
+  if (sc.key === 'sumo') { mctx.strokeRect(MX(-RING.base), MY(RING.cz + RING.base), 2 * RING.base * sx, 2 * RING.base * sz); mctx.beginPath(); mctx.ellipse(MX(0), MY(RING.cz), RING.r * sx, RING.r * sz, 0, 0, 7); mctx.stroke(); }
+  for (const st of sim.stats) {
+    const c = sim.cands.find(x => x.id === st.id);
+    mctx.fillStyle = st.id === sim.cur ? bad : c ? ink : line; mctx.globalAlpha = st.id === sim.cur ? 1 : .5;
+    mctx.beginPath(); mctx.arc(MX(st.X), MY(st.Z), st.id === sim.cur ? 4 : 1.5, 0, 7); mctx.fill();
+  }
+  mctx.globalAlpha = 1;
+  // ピント面（カメラの向きに直交する線）
+  const fz = 1 / sim.lensD, yaw = cam.yaw, cxp = fz * Math.sin(yaw), czp = fz * Math.cos(yaw), L2 = k * fz;
+  mctx.strokeStyle = focus; mctx.lineWidth = 2; mctx.beginPath(); mctx.moveTo(MX(cxp - L2 * Math.cos(yaw)), MY(czp + L2 * Math.sin(yaw))); mctx.lineTo(MX(cxp + L2 * Math.cos(yaw)), MY(czp - L2 * Math.sin(yaw))); mctx.stroke();
+  for (const st of sim.dyns) {
+    mctx.fillStyle = colOf(st.id); mctx.beginPath(); mctx.arc(MX(st.X), MY(st.Z), 4.5, 0, 7); mctx.fill();
+    if (st.id === sim.cur) { mctx.strokeStyle = ink; mctx.lineWidth = 2; mctx.beginPath(); mctx.arc(MX(st.X), MY(st.Z), 7.5, 0, 7); mctx.stroke(); }
+  }
+  mctx.fillStyle = muted; mctx.beginPath(); mctx.arc(MX(0), MY(0) - 2, 4, 0, 7); mctx.fill();
+  mctx.font = '11px "Noto Sans JP", sans-serif'; mctx.textAlign = 'left'; mctx.textBaseline = 'top';
+  mctx.fillText(sc.key === 'track' ? '縦（奥行き）は横の約 1/8 に縮めています' : '', 8, 4);
+}
+function renderStats() {
+  const m = metrics(sim);
+  const pct = v => isNaN(v) ? '—' : `${Math.round(v * 100)}%`;
+  $('sFocus').textContent = pct(m.focus);
+  const so = $('sOff'); so.textContent = pct(m.official); so.className = m.official > 0 ? 'bad' : 'ok';
+  const sf = $('sFan'); sf.textContent = pct(m.fan); sf.className = m.fan > 0 ? 'bad' : 'ok';
+  const cs = sim.cls, sc = $('sCls');
+  if (cs.decided) { sc.textContent = CLASS_NAME[cs.decided]; sc.className = cs.decided === sim.scene.key ? 'ok' : 'bad'; $('sClsSub').textContent = `シーン判別（${cs.decidedT.toFixed(2)} 秒で確定、${cs.decided === sim.scene.key ? '正解' : '誤り'}）`; }
+  else { sc.textContent = '判別中'; sc.className = ''; $('sClsSub').textContent = 'シーン判別'; }
+  const st = sim.status || {}, chip = $('statusChip');
+  if (sim.done) { chip.className = 'chip'; chip.textContent = '終了'; }
+  else if (!sim.cur) { chip.className = 'chip'; chip.textContent = sim.prof ? '選手が見つからない' : '判別中（まだ選ばない）'; }
+  else if (st.role === 'official') { chip.className = 'chip bad'; chip.textContent = '審判を選んでいる'; }
+  else if (st.role === 'fan') { chip.className = 'chip bad'; chip.textContent = '観客を選んでいる'; }
+  else if (st.focusA) { chip.className = 'chip ok'; chip.textContent = '選手に合焦'; }
+  else { chip.className = 'chip warn'; chip.textContent = '選手を選択、ピント移動中'; }
+}
+function renderLog() {
+  const ol = $('log');
+  if (logShown > sim.log.length) { ol.innerHTML = ''; logShown = 0; }
+  for (; logShown < sim.log.length; logShown++) {
+    const e = sim.log[logShown];
+    const li = document.createElement('li'); li.className = 'k-' + e.kind;
+    li.innerHTML = '<b></b><span></span>'; li.querySelector('b').textContent = e.t.toFixed(2); li.querySelector('span').textContent = e.msg;
+    ol.appendChild(li);
+  }
+  ol.scrollTop = ol.scrollHeight;
+}
+function renderAll(full) {
+  render();
+  if (full || sim.frame - lastScoreF >= 6 || sim.frame < lastScoreF || sim.done) { renderScores(); renderCls(); lastScoreF = sim.frame; }
+  if (full || sim.frame - lastChartF >= 3 || sim.frame < lastChartF || sim.done) { renderChart(); renderMap(); renderStats(); lastChartF = sim.frame; }
+  renderLog();
+}
+
+function restart() {
+  sim = makeSim(cfg, 5150 + cfg.scene);
+  logShown = 0; $('log').innerHTML = ''; lastScoreF = lastChartF = -99; layerKey = null;
+  stepSim(sim);
+  renderAll(true);
+  $('play').textContent = playing ? '一時停止' : '再生';
+}
+function updateFno() {
+  const sc = SCENES[cfg.scene], f = FNOS[cfg.fnoIdx], tol = tolOf(sc, f), z = GROUND_Z[sc.key];
+  $('fnoOut').textContent = `f/${f}`;
+  $('fnoHint').textContent = `${sc.cam.f}mm。${z} m で合焦範囲は約 ±${(tol * z * z).toFixed(2)} m。`;
+}
+function setScene(i) {
+  cfg.scene = i; const sc = SCENES[i];
+  cfg.fnoIdx = sc.fno; $('fno').value = sc.fno; cfg.af = { ...sc.af };
+  $('sceneDesc').textContent = sc.desc;
+  $('s_' + sc.key).checked = true;
+  updateFno(); markCmp(); restart();
+}
+function setMode(m) { cfg.mode = m; $('m_' + m).checked = true; $('modeDesc').textContent = MODES.find(x => x[0] === m)[2]; markCmp(); }
+function buildUI() {
+  $('sceneSeg').innerHTML = SCENES.map((s, i) => `<input type="radio" name="scene" id="s_${s.key}" value="${i}"><label for="s_${s.key}">${s.name}</label>`).join('');
+  $('modeSeg').innerHTML = MODES.map(([k, n]) => `<input type="radio" name="mode" id="m_${k}" value="${k}"><label for="m_${k}">${n}</label>`).join('');
+  $('sceneSeg').addEventListener('change', e => setScene(+e.target.value));
+  $('modeSeg').addEventListener('change', e => { setMode(e.target.value); restart(); });
+  $('followSeg').addEventListener('change', e => { cfg.follow = e.target.value; restart(); });
+  for (const [id, k] of [['cueColor', 'color'], ['cueLines', 'lines'], ['cueMotion', 'motion'], ['cuePose', 'pose']]) $(id).addEventListener('change', e => { cfg.cues[k] = e.target.checked; restart(); });
+  $('fno').addEventListener('input', e => { cfg.fnoIdx = +e.target.value; updateFno(); restart(); });
+  $('play').addEventListener('click', () => { if (sim.done) { playing = true; restart(); } else playing = !playing; $('play').textContent = playing ? '一時停止' : '再生'; });
+  $('restart').addEventListener('click', restart);
+  $('stepbtn').addEventListener('click', () => { playing = false; $('play').textContent = '再生'; if (!sim.done) { stepSim(sim); renderAll(true); } });
+  document.querySelectorAll('input[name=rate]').forEach(r => r.addEventListener('change', e => { rate = +e.target.value; }));
+  for (const id of ['showCands', 'showFans']) $(id).addEventListener('change', () => render());
+  vf.addEventListener('click', e => { const r = vf.getBoundingClientRect(); cfg.af = { u: clamp((e.clientX - r.left) / r.width, .03, .97), v: clamp((e.clientY - r.top) / r.height, .05, .9) }; playing = true; restart(); });
+  $('cmpBtn').addEventListener('click', runCompare);
+  window.addEventListener('resize', () => { sizeCanvases(); renderChart(); renderMap(); });
+  const mq = window.matchMedia('(prefers-color-scheme: dark)');
+  if (mq.addEventListener) mq.addEventListener('change', () => renderAll(true));
+}
+
+const CMP_MODES = ['generic', 'auto', 'track', 'pool', 'field', 'sumo'];
+const CUE_SETS = [
+  ['すべて', { color: true, lines: true, motion: true, pose: true }],
+  ['色と線だけ', { color: true, lines: true, motion: false, pose: false }],
+  ['動き方と姿勢だけ', { color: false, lines: false, motion: true, pose: true }]
+];
+let cmpData = null, cueData = null, cmpBusy = false;
+function runCompare() {
+  if (cmpBusy) return;
+  cmpBusy = true;
+  const btn = $('cmpBtn'); btn.disabled = true; btn.textContent = '計算中…';
+  const jobs = [];
+  SCENES.forEach((s, i) => CMP_MODES.forEach((m, j) => jobs.push({ t: 'm', i, j, cfg: { scene: i, mode: m, fnoIdx: s.fno, af: s.af, cues: CUE_SETS[0][1] } })));
+  SCENES.forEach((s, i) => CUE_SETS.forEach(([, cu], j) => jobs.push({ t: 'c', i, j, cfg: { scene: i, mode: 'auto', fnoIdx: s.fno, af: s.af, cues: cu } })));
+  cmpData = SCENES.map(() => CMP_MODES.map(() => null)); cueData = SCENES.map(() => CUE_SETS.map(() => null));
+  const put = (jb, m) => { (jb.t === 'm' ? cmpData : cueData)[jb.i][jb.j] = m; };
+  const finish = () => { cmpBusy = false; btn.disabled = false; btn.textContent = '再計算'; $('cmpProg').textContent = ''; };
+  let k = 0;
+  try {
+    const src = document.getElementById('core').textContent + `
+onmessage = e => { const { jobs } = e.data; for (let k = 0; k < jobs.length; k++) postMessage({ k, m: runAll(jobs[k].cfg) }); };`;
+    const wk = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+    wk.onmessage = e => { const { k: idx, m } = e.data; put(jobs[idx], m); $('cmpProg').textContent = `${idx + 1} / ${jobs.length}`; renderCmp(); if (idx + 1 === jobs.length) { wk.terminate(); finish(); } };
+    wk.onerror = () => { wk.terminate(); tick(); };
+    wk.postMessage({ jobs: jobs.map(j => ({ cfg: j.cfg })) });
+    return;
+  } catch (e) { /* 下の方法で計算 */ }
+  function tick() {
+    const t0 = performance.now();
+    while (k < jobs.length && performance.now() - t0 < 40) { const jb = jobs[k++]; put(jb, runAll(jb.cfg)); }
+    $('cmpProg').textContent = `${k} / ${jobs.length}`; renderCmp();
+    if (k < jobs.length) setTimeout(tick, 0); else finish();
+  }
+  tick();
+}
+const pc = v => isNaN(v) ? '—' : `${Math.round(v * 100)}%`;
+function renderCmp() {
+  const tbl = $('cmpTbl');
+  tbl.tHead.innerHTML = '<tr><th style="text-align:left">場面</th>' + CMP_MODES.map(m => `<th>${MODES.find(x => x[0] === m)[1]}</th>`).join('') + '</tr>';
+  tbl.tBodies[0].innerHTML = SCENES.map((s, i) => `<tr><td class="sc">${s.name}</td>` + CMP_MODES.map((m, j) => {
+    const r = cmpData[i][j];
+    if (!r) return `<td class="cell" data-s="${i}" data-m="${m}">…</td>`;
+    const clean = r.official === 0 && r.fan === 0;
+    return `<td class="cell" data-s="${i}" data-m="${m}"><b class="${!clean ? 'bad' : r.focus >= .85 ? 'ok' : ''}">${pc(r.focus)}</b><small>審判 ${pc(r.official)}・観客 ${pc(r.fan)}</small></td>`;
+  }).join('') + '</tr>').join('');
+  const ct = $('cueTbl');
+  ct.tHead.innerHTML = '<tr><th style="text-align:left">場面</th>' + CUE_SETS.map(([n]) => `<th>${n}</th>`).join('') + '</tr>';
+  ct.tBodies[0].innerHTML = SCENES.map((s, i) => `<tr><td class="sc">${s.name}</td>` + CUE_SETS.map((c, j) => {
+    const r = cueData[i][j];
+    if (!r) return '<td class="cell">…</td>';
+    const ok = r.decided === s.key;
+    return `<td class="cell"><b class="${ok ? 'ok' : 'bad'}">${r.decided ? CLASS_NAME[r.decided] : '未確定'}</b><small>${r.decidedT !== null && r.decidedT !== undefined ? r.decidedT.toFixed(2) + ' 秒' : ''}・合焦 ${pc(r.focus)}・審判 ${pc(r.official)}</small></td>`;
+  }).join('') + '</tr>').join('');
+  markCmp();
+}
+function markCmp() { document.querySelectorAll('#cmpTbl td.cell').forEach(td => td.classList.toggle('cur', +td.dataset.s === cfg.scene && td.dataset.m === cfg.mode)); }
+
+function loop(ts) {
+  if (lastTs === null) lastTs = ts;
+  const dt = Math.min(.1, (ts - lastTs) / 1000); lastTs = ts;
+  if (playing && !sim.done) {
+    acc += dt * rate; let n = 0;
+    while (acc >= DT && n < 4 && !sim.done) { stepSim(sim); acc -= DT; n++; }
+    if (n) renderAll(false);
+    if (sim.done) { renderAll(true); $('play').textContent = 'もう一度'; }
+  } else acc = 0;
+  requestAnimationFrame(loop);
+}
+
+buildUI();
+sizeCanvases();
+setMode('auto');
+if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) playing = false;
+setScene(0);
+runCompare();
+requestAnimationFrame(loop);
+window.__scene = { cfg, runAll, get sim() { return sim; } };
+
+</script>
+
+</body></html>
