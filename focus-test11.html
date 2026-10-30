@@ -1,0 +1,789 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>鉄棒 AF 部位ラボ</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;600&family=Noto+Sans+JP:wght@400;500;700&display=swap">
+<style>
+/* レイアウト：左が 3D のファインダーと推移、右が AF の設定。下にしくみの説明 */
+:root {
+  --bg: #eef2f0;
+  --panel: #ffffff;
+  --sunk: #e3e9e6;
+  --ink: #18211e;
+  --muted: #5a6863;
+  --line: #d2dbd7;
+  --accent: #17834a;
+  --accent-soft: rgba(23,131,74,.14);
+  --warn: #b86400;
+  --bad: #c3302a;
+  --bad-soft: rgba(195,48,42,.12);
+  --subj: #2a66d6;
+  --focus: #d07a06;
+  --crowd: rgba(195,48,42,.13);
+  --c1: #3b6fd8; --c2: #d9822b; --c3: #8a5cc7; --c4: #1f9aa0; --c5: #d0507a; --c6: #7d8a2a; --c7: #8a8f8d;
+  --font-display: "Barlow Semi Condensed", "Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif;
+  --font-body: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", "Meiryo", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101514; --panel: #18201e; --sunk: #222b29; --ink: #e2eae6; --muted: #91a09a; --line: #2c3734;
+    --accent: #3fcd7c; --accent-soft: rgba(63,205,124,.16); --warn: #f0a23a; --bad: #ff6a5c; --bad-soft: rgba(255,106,92,.14);
+    --subj: #74a2ff; --focus: #f3a53c; --crowd: rgba(255,106,92,.14);
+    --c1: #7aa2ff; --c2: #f2a35a; --c3: #b994ee; --c4: #4fc6cc; --c5: #f07fa3; --c6: #b4c24e; --c7: #a3aaa7;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101514; --panel: #18201e; --sunk: #222b29; --ink: #e2eae6; --muted: #91a09a; --line: #2c3734;
+  --accent: #3fcd7c; --accent-soft: rgba(63,205,124,.16); --warn: #f0a23a; --bad: #ff6a5c; --bad-soft: rgba(255,106,92,.14);
+  --subj: #74a2ff; --focus: #f3a53c; --crowd: rgba(255,106,92,.14);
+  --c1: #7aa2ff; --c2: #f2a35a; --c3: #b994ee; --c4: #4fc6cc; --c5: #f07fa3; --c6: #b4c24e; --c7: #a3aaa7;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 14px; line-height: 1.65;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 40px;
+}
+.wrap { max-width: 1260px; margin: 0 auto; display: grid; gap: 18px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 20px; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(25px, 6vw, 30px); letter-spacing: .01em; margin: 0; text-wrap: balance; }
+h1 small { font-family: var(--font-mono); font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 10px; letter-spacing: .08em; }
+@media (max-width: 520px) { h1 small { display: block; margin-left: 0; } }
+header p { margin: 0; color: var(--muted); max-width: 64ch; }
+h2 { font-family: var(--font-display); font-weight: 600; font-size: 19px; margin: 0; letter-spacing: .02em; text-wrap: balance; }
+h3 { font-family: var(--font-display); font-weight: 600; font-size: 16.5px; margin: 10px 0 0; letter-spacing: .02em; }
+.label { font-family: var(--font-display); font-weight: 600; font-size: 12.5px; letter-spacing: .1em; color: var(--muted); }
+
+.main { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 920px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.col { display: grid; gap: 14px; min-width: 0; }
+
+.vf { position: relative; background: #0b0d0c; border-radius: 10px; overflow: hidden; }
+.vf canvas { display: block; width: 100%; height: auto; }
+.transport { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+button, .seg label {
+  font-family: var(--font-display); font-weight: 600; font-size: 14px; letter-spacing: .03em;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 7px;
+  padding: 6px 12px; cursor: pointer; line-height: 1.3;
+}
+button:hover, .seg label:hover { border-color: var(--muted); }
+button:disabled { opacity: .6; cursor: progress; }
+button:focus-visible, .seg input:focus-visible + label, input[type=range]:focus-visible, input[type=checkbox]:focus-visible, .switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; min-width: 88px; }
+:root[data-theme="dark"] button.primary { color: #0c1410; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) button.primary { color: #0c1410; } }
+.transport .spacer { flex: 1; }
+.chip { font-family: var(--font-display); font-weight: 600; font-size: 13px; padding: 3px 10px; border-radius: 99px; background: var(--sunk); color: var(--muted); letter-spacing: .04em; white-space: nowrap; }
+.chip.ok { background: var(--accent-soft); color: var(--accent); }
+.chip.warn { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.chip.bad { background: var(--bad-soft); color: var(--bad); }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 10px; min-width: 0; }
+.card.guard { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.cardhead { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.chart canvas, .mapc canvas { display: block; width: 100%; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--muted); }
+.legend i { display: inline-block; width: 14px; height: 10px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+.legend i.ln { height: 3px; }
+
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 520px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.stat { display: grid; gap: 2px; }
+.stat b { font-family: var(--font-mono); font-weight: 600; font-size: 21px; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.stat b.bad { color: var(--bad); }
+.stat b.ok { color: var(--accent); }
+.stat span { font-size: 12px; color: var(--muted); }
+
+.ctrl { display: grid; gap: 2px; }
+.ctrl .row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.ctrl output { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.ctrl .hint { font-size: 12px; color: var(--muted); line-height: 1.45; }
+input[type=range] { width: 100%; accent-color: var(--accent); margin: 2px 0; }
+.ticks { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); margin-top: -2px; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label { font-size: 13.5px; padding: 5px 10px; }
+.seg input:checked + label { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.desc { font-size: 13px; color: var(--muted); margin: 0; }
+.checks { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); }
+.checks label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.checks input { accent-color: var(--accent); }
+.weights { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 16px; }
+@media (max-width: 400px) { .weights { grid-template-columns: minmax(0, 1fr); } }
+.weights .ctrl label { font-size: 13px; }
+details > summary { cursor: pointer; font-family: var(--font-display); font-weight: 600; font-size: 12.5px; letter-spacing: .1em; color: var(--muted); }
+details[open] > summary { margin-bottom: 8px; }
+
+.guardlist { display: grid; gap: 12px; }
+.gitem { display: grid; gap: 4px; }
+.switch { display: flex; align-items: center; gap: 10px; cursor: pointer; font-weight: 700; }
+.switch input { position: absolute; opacity: 0; }
+.switch span.t { width: 38px; height: 22px; border-radius: 99px; background: var(--sunk); border: 1px solid var(--line); position: relative; flex: none; transition: background .15s; }
+.switch span.t::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--muted); transition: transform .15s, background .15s; }
+.switch input:checked + span.t { background: var(--accent-soft); border-color: var(--accent); }
+.switch input:checked + span.t::after { transform: translateX(16px); background: var(--accent); }
+.gitem p { margin: 0 0 0 48px; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+.gitem .ctrl { margin-left: 48px; }
+.guardbtns { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.log { font-family: var(--font-mono); font-size: 12px; max-height: 190px; overflow-y: auto; display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.log li { display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 8px; color: var(--muted); }
+.log li b { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.log li.k-bad span { color: var(--bad); }
+.log li.k-warn span { color: var(--warn); }
+.log li.k-ok span { color: var(--accent); }
+.log span { font-family: var(--font-body); }
+
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 6px; text-align: center; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+th { font-family: var(--font-display); font-weight: 600; color: var(--muted); letter-spacing: .03em; white-space: nowrap; }
+#scoreTbl { min-width: 640px; }
+#scoreTbl td { font-family: var(--font-mono); font-size: 12px; }
+#scoreTbl td.f { background: color-mix(in srgb, var(--accent) calc(var(--v) * 30%), transparent); }
+#scoreTbl th.off, #scoreTbl td.off { opacity: .35; }
+#scoreTbl td.name { text-align: left; font-family: var(--font-display); font-weight: 600; font-size: 13.5px; white-space: nowrap; }
+#scoreTbl td.name i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+#scoreTbl td.tot { text-align: left; min-width: 70px; }
+#scoreTbl td.tot .bar { height: 6px; border-radius: 3px; margin-top: 2px; }
+#scoreTbl td.judge { text-align: left; font-family: var(--font-body); font-size: 12px; white-space: nowrap; }
+#scoreTbl tr.sel td { background-color: var(--accent-soft); }
+#scoreTbl tr.sel.fan td { background-color: var(--bad-soft); }
+#scoreTbl tr.ex td:not(.judge):not(.name) { opacity: .4; text-decoration: line-through; }
+#scoreTbl tr.miss td { color: var(--muted); }
+#scoreTbl tr.sum td { text-align: left; font-family: var(--font-body); color: var(--muted); }
+.tag { font-family: var(--font-display); font-size: 11.5px; font-weight: 600; padding: 0 6px; border-radius: 99px; margin-left: 6px; letter-spacing: .03em; }
+.tag.sel { background: var(--accent); color: var(--panel); }
+.tag.pend { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+.tag.ideal { background: var(--sunk); color: var(--ink); }
+.ex-gate { color: var(--accent); }
+.ex-crowd { color: var(--accent); }
+.fanword { color: var(--bad); }
+#cmpTbl { min-width: 760px; }
+#ablTbl { min-width: 420px; max-width: 640px; }
+#ablTbl td.cell b.ok { color: var(--accent); } #ablTbl td.cell b.bad { color: var(--bad); }
+#ablTbl td.cell { font-family: var(--font-mono); } #ablTbl td.cell small { display: block; font-size: 11px; color: var(--muted); }
+#ablTbl td.sc { text-align: left; font-family: var(--font-display); font-weight: 600; font-size: 13px; }
+#cmpTbl td.cell { font-family: var(--font-mono); }
+#cmpTbl td.cell b { font-weight: 600; }
+#cmpTbl td.cell b.bad { color: var(--bad); }
+#cmpTbl td.cell b.ok { color: var(--accent); }
+#cmpTbl td.cell small { display: block; font-size: 11px; color: var(--muted); }
+#cmpTbl td.cur { outline: 2px solid var(--accent); outline-offset: -2px; }
+#cmpTbl td.sc { text-align: left; font-family: var(--font-display); font-weight: 600; font-size: 13px; white-space: nowrap; }
+.note { font-size: 12.5px; color: var(--muted); margin: 0; }
+.progress { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+
+.lower { display: grid; gap: 18px; }
+.algo p, .algo li { max-width: 78ch; }
+.algo ul, .algo ol { margin: 0; padding-left: 1.3em; display: grid; gap: 4px; }
+.algo p { margin: 0; }
+.formula { font-family: var(--font-mono); font-size: 12.5px; background: var(--sunk); border-radius: 8px; padding: 10px 12px; white-space: pre-wrap; overflow-x: auto; line-height: 1.6; }
+.flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; }
+.flow .box { background: var(--sunk); border-radius: 6px; padding: 4px 10px; }
+.flow .box.g { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.flow .arr { color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .switch span.t, .switch span.t::after { transition: none; } }
+.vf { aspect-ratio: 16 / 9; }
+.vf canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+#ov { cursor: crosshair; touch-action: manipulation; }
+.err { position: absolute; inset: 0; display: grid; place-items: center; color: #f2f2f2; font-size: 14px; padding: 16px; text-align: center; }
+
+.now { font: 600 18px var(--font-body); margin: 4px 0 10px; }
+.vis { display: grid; gap: 8px; }
+.vrow { display: grid; grid-template-columns: 3em 1fr 3.2em; align-items: center; gap: 8px; font-size: 14px; }
+.vrow b { font-family: var(--font-mono); text-align: right; }
+.vbar { position: relative; height: 14px; background: var(--sunk); border-radius: 4px; overflow: hidden; }
+.vbar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; }
+.vbar i.h { background: var(--bad); } .vbar i.t { background: var(--c1); }
+.vbar em { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--ink); }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+.err { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; padding: 20px; text-align: center; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>鉄棒 AF 部位ラボ <small>3D RENDER · HEAD → TORSO PRIORITY · 60 Hz</small></h1>
+    <p>体操の鉄棒で、AF が人物の「どの部位」に枠を出すかを確かめる 3D CG です。選手は厚みのある体で、大車輪・離れ技・シュタルダー・ひねり下りを行います。体が回ると頭が腕や胴体の陰に入り、頭が見えないのに胴体だけ見える瞬間や、脚しか見えない瞬間が何度も起きます。</p>
+  </header>
+
+  <div class="main">
+    <div class="col">
+      <div class="vf" id="vfbox">
+        <canvas id="gl" width="960" height="540" aria-label="3D CG のファインダー画面"></canvas>
+        <canvas id="ov" width="960" height="540" aria-label="AF 枠と部位の色分け"></canvas>
+      </div>
+      <div class="transport">
+        <button id="play" class="primary">一時停止</button>
+        <button id="restart">最初から</button>
+        <button id="stepbtn">1コマ送り</button>
+        <div class="seg" role="radiogroup" aria-label="再生速度">
+          <input type="radio" name="rate" id="r025" value="0.25"><label for="r025">0.25×</label>
+          <input type="radio" name="rate" id="r05" value="0.5"><label for="r05">0.5×</label>
+          <input type="radio" name="rate" id="r1" value="1" checked><label for="r1">1×</label>
+        </div>
+        <span class="spacer"></span>
+        <span id="statusChip" class="chip">—</span>
+      </div>
+      <div class="checks">
+        <label><input type="checkbox" id="showMask" checked>部位の色分けを重ねる（<b style="color:#e8463c">頭</b>・<b style="color:#3c8cff">胴体</b>・<b style="color:#d9b020">腕</b>・<b style="color:#36b866">脚</b>）</label>
+      </div>
+
+      <div class="card chart">
+        <div class="cardhead"><h2>部位の見え方と AF 枠の推移</h2><span class="label">0〜13 秒</span></div>
+        <canvas id="tl" height="230" aria-label="頭と胴体の見えている割合、AF 枠の部位、ピントの推移"></canvas>
+        <div class="legend">
+          <span><i class="ln" style="background:var(--bad)"></i>頭の見えている割合</span>
+          <span><i class="ln" style="background:var(--c1)"></i>胴体の見えている割合</span>
+          <span><i class="ln" style="background:var(--muted)"></i>検出しきい値（点線）</span>
+          <span><i style="background:var(--bad)"></i>頭に枠</span>
+          <span><i style="background:var(--c1)"></i>胴体に枠</span>
+          <span><i style="background:var(--sunk);outline:1px solid var(--line)"></i>枠なし</span>
+          <span><i style="background:var(--accent)"></i>選手に合焦</span>
+          <span><i style="background:var(--warn)"></i>ピントが外れている</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="stats">
+          <div class="stat"><b id="sHead">—</b><span>頭に枠</span></div>
+          <div class="stat"><b id="sTorso">—</b><span>胴体に枠（頭が見えない）</span></div>
+          <div class="stat"><b id="sNone">—</b><span>枠なし（頭も胴体も見えない）</span></div>
+          <div class="stat"><b id="sFocus">—</b><span>選手に合焦していた割合</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card">
+        <span class="label">いまの演技</span>
+        <p class="now" id="phaseNow">—</p>
+        <div class="vis">
+          <div class="vrow"><span>頭</span><div class="vbar"><i id="vHead" class="h"></i><em id="thrMarkH"></em></div><b id="vHeadT">—</b></div>
+          <div class="vrow"><span>胴体</span><div class="vbar"><i id="vTorso" class="t"></i><em id="thrMarkT"></em></div><b id="vTorsoT">—</b></div>
+        </div>
+        <p class="desc">見えている割合 ＝ 今見えている画素 ÷ 隠れていなければ見える画素。縦線がしきい値です。</p>
+      </div>
+
+      <div class="card guard">
+        <span class="label">部位を検出できたとみなす割合 <output id="thrOut">30%</output></span>
+        <input type="range" id="thr" min="10" max="70" step="5" value="30" aria-label="検出しきい値">
+        <p class="desc">頭がこの割合以上見えていれば頭に、頭が足りず胴体がこの割合以上見えていれば胴体に枠を出します。どちらも足りなければ枠を消し、レンズは直前の動きから予測して動かします。</p>
+      </div>
+
+      <div class="card">
+        <span class="label">レンズ</span>
+        <div class="seg" role="radiogroup" aria-label="焦点距離">
+          <input type="radio" name="focal" id="fl105" value="105"><label for="fl105">105mm</label>
+          <input type="radio" name="focal" id="fl135" value="135" checked><label for="fl135">135mm</label>
+          <input type="radio" name="focal" id="fl200" value="200"><label for="fl200">200mm</label>
+        </div>
+        <div class="seg" role="radiogroup" aria-label="絞り" style="margin-top:8px">
+          <input type="radio" name="fno" id="f14" value="1.4"><label for="f14">F1.4</label>
+          <input type="radio" name="fno" id="f28" value="2.8" checked><label for="f28">F2.8</label>
+          <input type="radio" name="fno" id="f56" value="5.6"><label for="f56">F5.6</label>
+        </div>
+        <p class="desc">描画速度：<span id="sFps">—</span></p>
+      </div>
+
+      <div class="card">
+        <span class="label">出来事</span>
+        <ol class="log" id="log"></ol>
+      </div>
+    </div>
+  </div>
+
+  <div class="lower">
+    <div class="card algo">
+      <h2>しくみ</h2>
+      <div class="flow" aria-label="1 コマの処理">
+        <span class="box">① 3D 描画（厚みのある体）</span><span class="arr">→</span>
+        <span class="box">② 部位ごとの番号を読み出す</span><span class="arr">→</span>
+        <span class="box g">③ 頭 → 胴体 → なし の順で部位を決める</span><span class="arr">→</span>
+        <span class="box">④ その部位の距離で位相差AF</span><span class="arr">→</span>
+        <span class="box">⑤ ボケを付けて表示</span>
+      </div>
+      <ul>
+        <li><b>部位の見え方</b>：体を頭・胴体（首と骨盤を含む）・腕・脚に分け、部位ごとに番号を塗った画面（320×180 画素）を描きます。さらに頭だけ・胴体だけを描いた画面も作り、「隠れていなければ何画素見えるか」と比べて、見えている割合を出します。腕や脚、鉄棒の陰に入った分だけ割合が下がります。</li>
+        <li><b>部位の優先順位</b>：頭が見えていれば頭、頭が見えず胴体が見えていれば胴体、どちらも見えなければ枠なし。1 コマだけのちらつきで枠が跳ばないよう、同じ判定が 2 コマ続いたら切り替えます。</li>
+        <li><b>ピント</b>：枠を出した部位の画素の平均距離に、ボケに応じたノイズを足して測距し、α-β フィルタで動きを予測してレンズを動かします。枠がない間は測距できないので、直前の速度で予測を続けます。合焦の判定は胴体の中心で行っています。</li>
+        <li><b>演技</b>：大車輪 → 離れ技（コバチ：鉄棒を越えながら抱え込みで 1 回半宙返りして握り直す）→ 大車輪 → シュタルダー（脚を腕の間に入れて回る）→ 大車輪 → 2 回宙返り 1 回ひねり下り → 着地。カメラは鉄棒のほぼ正面（8° ずれ）の 16 m 先から選手を追います。</li>
+      </ul>
+      <h3>どこまでリアルか</h3>
+      <ul>
+        <li>参照の動画は開けなかったため、一般的な鉄棒の演技を角度の台本で作っています。体はカプセルと球の組み合わせで、手首のひねりや肩の柔らかさは省いています。</li>
+        <li>実機の AF は画像から部位を推定するので、見えている割合ではなく「推定の自信度」で判断し、腕に隠れた頭を体の形から推測して枠を出すこともあります。ここでは「見えている割合」をその代わりにしています。</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+if (!window.THREE) { $('vfbox').insertAdjacentHTML('beforeend', '<div class="err">3D エンジンを読み込めませんでした。ネットワークを確認して再読み込みしてください。</div>'); return; }
+const T = THREE;
+if (T.ColorManagement) T.ColorManagement.legacyMode = false;
+
+// ============================================================ 定数
+const RW = 960, RH = 540, IW = 320, IH = 180, K = RW / IW, FPS = 60, DT = 1 / FPS, DUR = 13;
+const SENSOR_W = 0.036, COC = 0.00003, LAT = 3, MOTOR = 1.2;
+const BAR_Y = 2.95, MAT_Y = 0.2, LAND_Z = 3.0;
+const ID = { HEAD: 10, TORSO: 11, ARM: 12, LEG: 13, BAR: 20, MAT: 21, ARENA: 22, CROWD: 23 };
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const smooth = x => { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); };
+const lerp = (a, b, u) => a + (b - a) * u;
+const D2R = Math.PI / 180;
+const V = (x, y, z) => new T.Vector3(x, y, z);
+function mkRng(seed) {
+  let a = seed >>> 0, spare = null;
+  const u = () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const n = (m, s) => { if (spare !== null) { const v = spare; spare = null; return m + s * v; } let u1 = 0; while (u1 === 0) u1 = u(); const u2 = u(), r = Math.sqrt(-2 * Math.log(u1)); spare = r * Math.sin(2 * Math.PI * u2); return m + s * r * Math.cos(2 * Math.PI * u2); };
+  return { u, n };
+}
+
+// ============================================================ 体の寸法（腰が原点、胴体が +Y、胸の向きが +Z）
+const BODY = { torso: .52, neck: .24, arm: .62, thigh: .44, shin: .43, shW: .17, hipW: .075, headR: .11 };
+const vg = g => V(0, Math.cos(g), Math.sin(g));     // 体の縦の面内で、+Y から +Z（胸の側）へ g 回した向き
+
+// ============================================================ 演技の台本
+// pose = { hips: 腰の位置（世界）, Om: 胴体の向き（世界の +Y から +Z へ）, tw: ひねり, arm, pike, knee, neck（いずれも角度） }
+function giant(t0, Om0, rate) { return t => Om0 + rate * (t - t0) + .28 * Math.sin(rate * (t - t0)); }
+function hipsOnBar(Om, j, tw) {
+  // 手が鉄棒を握っているとき：鉄棒 − 回転 ×（肩 + 腕）
+  const q = new T.Quaternion().setFromEuler(new T.Euler(Om, tw || 0, 0, 'XYZ'));
+  const local = V(0, BODY.torso, 0).add(vg(j.arm * D2R).multiplyScalar(BODY.arm));
+  return V(0, BAR_Y, 0).sub(local.applyQuaternion(q));
+}
+// 大車輪中の姿勢（下で少し反り、上で少し曲げる）
+function swingJ(Om) { const c = Math.cos(Om); return { arm: 0, pike: 10 - 22 * c, knee: 0, neck: 22 - 16 * c }; }
+const TUCK = { arm: 105, pike: 138, knee: 140, neck: 48 };
+const RATE = 2 * Math.PI / 1.55;
+const G1 = giant(0, -0.6, RATE);
+const T_REL = 4.45, T_CATCH = 5.55, T_D = 8.55, T_LAND = 9.95;
+const OM_REL = G1(T_REL), OM_CATCH = OM_REL + 3 * Math.PI;   // コバチ：1 回半の後方宙返りで鉄棒を越えて握り直す
+const G2 = giant(T_CATCH, OM_CATCH, RATE);
+const OM_D = G2(T_D);
+const OM_LAND = Math.ceil((OM_D + 3.4 * Math.PI) / (2 * Math.PI)) * 2 * Math.PI;   // 2 回宙返りで着地（直立 = 0 の倍数）
+const PHASES = [
+  [0, '大車輪'], [T_REL - .05, '離れ技（コバチ）'], [T_CATCH, '大車輪'], [6.45, 'シュタルダー（脚を腕の間に入れる）'], [7.85, '大車輪'],
+  [T_D, '下り：2 回宙返り 1 回ひねり'], [T_LAND, '着地']
+];
+const phaseAt = t => { let n = PHASES[0][1]; for (const [k, s] of PHASES) if (t >= k) n = s; return n; };
+function mixJ(a, b, u) { return { arm: lerp(a.arm, b.arm, u), pike: lerp(a.pike, b.pike, u), knee: lerp(a.knee, b.knee, u), neck: lerp(a.neck, b.neck, u) }; }
+function poseAt(t) {
+  if (t < T_REL) { const Om = G1(t); const j = swingJ(Om); return { Om, tw: 0, j, hips: hipsOnBar(Om, j) }; }
+  if (t < T_CATCH) {
+    const u = (t - T_REL) / (T_CATCH - T_REL);
+    const jA = swingJ(OM_REL), jB = swingJ(OM_CATCH);
+    const tuck = smooth(u / .25) * (1 - smooth((u - .7) / .3));
+    const j = mixJ(mixJ(jA, jB, u), TUCK, tuck);
+    const Om = lerp(OM_REL, OM_CATCH, u * u * (3 - 2 * u) * .3 + u * .7);
+    const hA = hipsOnBar(OM_REL, jA), hB = hipsOnBar(OM_CATCH, jB);
+    const hips = hA.clone().lerp(hB, u); hips.y += 4 * 1.25 * u * (1 - u);
+    // 握り直す瞬間に手が鉄棒に来るよう、最後は鉄棒基準の位置へ寄せる
+    const hOn = hipsOnBar(Om, j); hips.lerp(hOn, smooth((u - .82) / .18));
+    return { Om, tw: 0, j, hips };
+  }
+  if (t < T_D) {
+    const Om = G2(t);
+    let j = swingJ(Om);
+    // シュタルダー：振り下ろしから最下点で体を深く折り、脚を腕の間に入れて胸の前にたたむ
+    const st = smooth((t - 6.45) / .25) * (1 - smooth((t - 7.75) / .25)) * smooth((Math.cos(Om) + .35) / .7);
+    j = mixJ(j, { arm: 0, pike: 170, knee: 0, neck: 55 }, st);
+    return { Om, tw: 0, j, hips: hipsOnBar(Om, j) };
+  }
+  if (t < T_LAND) {
+    const u = (t - T_D) / (T_LAND - T_D);
+    const jA = swingJ(OM_D), jL = { arm: 175, pike: 25, knee: 40, neck: 0 };
+    const tuck = smooth(u / .14) * (1 - smooth((u - .66) / .14));
+    const open = smooth((u - .66) / .14);
+    let j = mixJ(jA, TUCK, tuck); j = mixJ(j, { arm: 170, pike: 5, knee: 0, neck: 0 }, open * (1 - smooth((u - .85) / .15))); j = mixJ(j, jL, smooth((u - .85) / .15));
+    const Om = lerp(OM_D, OM_LAND, 1 - Math.pow(1 - u, 1.35));
+    const tw = 2 * Math.PI * smooth((u - .62) / .28);
+    const hA = hipsOnBar(OM_D, jA), hL = V(0, MAT_Y + .75, LAND_Z);
+    const hips = hA.clone().lerp(hL, u); hips.y += 4 * 1.7 * u * (1 - u);
+    return { Om, tw, j, hips };
+  }
+  // 着地：膝で衝撃を吸収して立ち、両腕を上げる
+  const u = t - T_LAND;
+  const absorb = Math.exp(-u * 3.2) * Math.sin(Math.min(Math.PI, u * 6));
+  const up = smooth((u - .8) / .5);
+  const knee = lerp(40, 4, smooth(u / .6)) + 18 * absorb, pike = lerp(25, 2, smooth(u / .6)) + 10 * absorb;
+  const legLen = BODY.thigh * Math.cos(pike * D2R) + BODY.shin * Math.cos((knee - pike) * D2R);
+  const j = { arm: lerp(175, 160, smooth(u / .4)) * (1 - up) + 18 * up + (1 - up) * 0, pike, knee, neck: 0 };
+  j.arm = up > 0 ? lerp(165, 15, up) : lerp(175, 165, smooth(u / .4));
+  return { Om: 2 * Math.PI * 0, tw: 2 * Math.PI, j, hips: V(0, MAT_Y + legLen + .03, LAND_Z) };
+}
+
+// ============================================================ レンダラーと場面
+let renderer;
+try { renderer = new T.WebGLRenderer({ canvas: $('gl'), antialias: false, preserveDrawingBuffer: true, powerPreference: 'high-performance' }); }
+catch (e) { $('vfbox').insertAdjacentHTML('beforeend', '<div class="err">このブラウザは WebGL に対応していないため、3D の場面を表示できません。</div>'); return; }
+renderer.setPixelRatio(1); renderer.setSize(RW, RH, false);
+renderer.shadowMap.enabled = true; renderer.shadowMap.autoUpdate = false; renderer.shadowMap.type = T.PCFSoftShadowMap;
+const HDR = renderer.capabilities.isWebGL2;
+const scene = new T.Scene();
+scene.background = new T.Color('#0e1016');
+const CAM_YAW = 8 * D2R, CAM_R = 16;
+const CAM = V(CAM_R * Math.sin(CAM_YAW), 1.5, CAM_R * Math.cos(CAM_YAW));
+let FOCAL = .135;
+const camera = new T.PerspectiveCamera(30, RW / RH, .3, 200);
+function setFocal(f) { FOCAL = f; camera.fov = 2 * Math.atan(SENSOR_W * 9 / 16 / 2 / f) / D2R; camera.updateProjectionMatrix(); }
+setFocal(.135);
+
+scene.add(new T.HemisphereLight('#c8d4e8', '#3a3040', .55));
+const key = new T.DirectionalLight('#fff4e6', 2.4); key.position.set(6, 14, 9); key.target.position.set(0, 2, 0);
+key.castShadow = true; key.shadow.mapSize.set(2048, 2048); Object.assign(key.shadow.camera, { left: -6, right: 6, top: 6, bottom: -6, near: 2, far: 40 }); key.shadow.bias = -.0005; key.shadow.normalBias = .02;
+const rim = new T.DirectionalLight('#9fb8ff', .9); rim.position.set(-8, 9, -10);
+scene.add(key, key.target, rim);
+
+const infoVS = `varying float vD; void main(){ vec4 p = vec4(position,1.0);
+#ifdef USE_INSTANCING
+  p = instanceMatrix * p;
+#endif
+  vec4 mv = modelViewMatrix * p; vD = -mv.z; gl_Position = projectionMatrix * mv; }`;
+const infoFS = `uniform float uId; varying float vD; void main(){ float d = clamp(vD*100.0, 0.0, 65535.0); float hi = floor(d/256.0); float lo = d - hi*256.0; gl_FragColor = vec4(uId/255.0, hi/255.0, lo/255.0, 1.0); }`;
+const infoMats = {};
+const infoMat = id => infoMats[id] || (infoMats[id] = new T.ShaderMaterial({ uniforms: { uId: { value: id } }, vertexShader: infoVS, fragmentShader: infoFS }));
+const meshes = [];
+function reg(mesh, id, cast) { mesh.userData.disp = mesh.material; mesh.userData.info = infoMat(id); mesh.userData.pid = id; meshes.push(mesh); if (cast) mesh.castShadow = true; mesh.receiveShadow = true; return mesh; }
+const std = (c, r, extra) => new T.MeshStandardMaterial(Object.assign({ color: c, roughness: r === undefined ? .8 : r, metalness: 0 }, extra || {}));
+function canvasTex(w, h, draw) { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); const t = new T.CanvasTexture(c); if (T.sRGBEncoding) t.encoding = T.sRGBEncoding; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t; }
+
+// ---- 床・マット・鉄棒
+{
+  const floor = reg(new T.Mesh(new T.PlaneGeometry(80, 80), std('#2b4f8f', .95)), ID.ARENA); floor.rotation.x = -Math.PI / 2; scene.add(floor);
+  const matTex = canvasTex(256, 256, (x, w, h) => { x.fillStyle = '#e9edf2'; x.fillRect(0, 0, w, h); x.fillStyle = 'rgba(40,80,160,.9)'; x.fillRect(0, h * .46, w, h * .08); for (let i = 0; i < 400; i++) { x.fillStyle = 'rgba(255,255,255,.35)'; x.fillRect(Math.random() * w, Math.random() * h, 2, 2); } });
+  const mat = reg(new T.Mesh(new T.BoxGeometry(3.2, MAT_Y, 9), std('#ffffff', .9, { map: matTex })), ID.MAT); mat.position.set(0, MAT_Y / 2, .8); scene.add(mat);
+  const bar = reg(new T.Mesh(new T.CylinderGeometry(.014, .014, 2.6, 16), std('#d8dde3', .25, { metalness: .9 })), ID.BAR, true); bar.rotation.z = Math.PI / 2; bar.position.set(0, BAR_Y, 0); scene.add(bar);
+  for (const s of [-1, 1]) {
+    const up = reg(new T.Mesh(new T.CylinderGeometry(.04, .05, BAR_Y, 12), std('#e9e9ea', .4, { metalness: .4 })), ID.BAR, true); up.position.set(s * 1.25, BAR_Y / 2, 0); scene.add(up);
+    const cap = reg(new T.Mesh(new T.BoxGeometry(.12, .1, .12), std('#c8323a', .5)), ID.BAR); cap.position.set(s * 1.25, BAR_Y, 0); scene.add(cap);
+    for (const dz of [-1, 1]) { // ワイヤー
+      const a = V(s * 1.25, BAR_Y - .05, 0), b = V(s * 1.95, 0, dz * 2.6), m = reg(new T.Mesh(new T.CylinderGeometry(.006, .006, a.distanceTo(b), 4), std('#888c90', .4, { metalness: .6 })), ID.BAR);
+      m.position.copy(a).lerp(b, .5); m.quaternion.setFromUnitVectors(V(0, 1, 0), b.clone().sub(a).normalize()); scene.add(m);
+    }
+    const foot = reg(new T.Mesh(new T.BoxGeometry(.5, .06, .5), std('#555a60', .5)), ID.BAR); foot.position.set(s * 1.25, MAT_Y + .03, 0); scene.add(foot);
+  }
+  // 奥の看板と観客席（カメラの正面奥。照明が落ちていて暗い）
+  const back = new T.Group(); back.position.set(-Math.sin(CAM_YAW) * 24, 0, -Math.cos(CAM_YAW) * 24); back.rotation.y = CAM_YAW; scene.add(back);
+  const adTex = canvasTex(1024, 64, (x, w, h) => { x.fillStyle = '#10305f'; x.fillRect(0, 0, w, h); x.fillStyle = '#f2f2f2'; x.font = 'bold 40px "Barlow Semi Condensed", sans-serif'; x.textBaseline = 'middle'; for (let i = 0; i < 4; i++) x.fillText('ARTISTIC GYMNASTICS  ·  HIGH BAR', 20 + i * 260, 34); });
+  const ad = reg(new T.Mesh(new T.PlaneGeometry(60, 1.1), std('#ffffff', .6, { map: adTex })), ID.ARENA); ad.position.set(0, .55, 0); back.add(ad);
+  const wall = reg(new T.Mesh(new T.PlaneGeometry(90, 30), std('#14161c', .95)), ID.ARENA); wall.position.set(0, 14, -20); back.add(wall);
+  const r = mkRng(9), N = 2600, body = new T.InstancedMesh(new T.CapsuleGeometry(.2, .3, 4, 8), std('#ffffff', .9), N), head = new T.InstancedMesh(new T.SphereGeometry(.12, 8, 6), std('#ffffff', .6), N), m = new T.Matrix4(), c = new T.Color();
+  const shirts = ['#2f5fb3', '#c9ccce', '#a8423a', '#2b2f36', '#b29a4a', '#4b7a5c', '#6a5c87', '#a9722b'], skins = ['#e2b893', '#c99a73', '#edc6a2', '#b07f5a'];
+  let n = 0;
+  back.updateMatrixWorld(true);
+  for (let k = 0; k < 20; k++) for (let a = -34; a <= 34 && n < N; a += .62) {
+    if (r.u() < .2) continue;
+    const p = V(a + r.n(0, .06), 1.4 + k * .6, -2 - k * .95).applyMatrix4(back.matrixWorld);
+    m.makeTranslation(p.x, p.y, p.z); body.setMatrixAt(n, m); c.set(shirts[(r.u() * shirts.length) | 0]).multiplyScalar(.1); body.setColorAt(n, c);
+    m.makeTranslation(p.x, p.y + .45, p.z); head.setMatrixAt(n, m); c.set(skins[(r.u() * 4) | 0]).multiplyScalar(.12); head.setColorAt(n, c); n++;
+  }
+  body.count = head.count = n; reg(body, ID.CROWD); reg(head, ID.CROWD); scene.add(body, head);
+}
+
+// ---- 選手（厚みのある体）
+const gym = (() => {
+  const g = new T.Group(); scene.add(g);
+  const mSkin = std('#d9a984', .55), mTop = std('#c8203a', .55, { metalness: .05 }), mPant = std('#f2f2f4', .8), mHair = std('#1a1310', .7), mGrip = std('#8a6a4a', .7);
+  const parts = { head: [], torso: [], arm: [], leg: [] };
+  const seg = (r, mat, id, scale) => { const m = reg(new T.Mesh(new T.CapsuleGeometry(r, 1, 6, 14), mat), id, true); if (scale) m.userData.sc = scale; g.add(m); return m; };
+  const torso = seg(.14, mTop, ID.TORSO, [1.28, .82]);
+  const chest = reg(new T.Mesh(new T.SphereGeometry(.17, 18, 14), mTop), ID.TORSO, true); g.add(chest);
+  const pelvis = reg(new T.Mesh(new T.SphereGeometry(.15, 16, 12), mPant), ID.TORSO, true); g.add(pelvis);
+  const neck = seg(.05, mSkin, ID.TORSO);
+  const head = reg(new T.Mesh(new T.SphereGeometry(BODY.headR, 22, 16), mSkin), ID.HEAD, true); g.add(head);
+  const hair = reg(new T.Mesh(new T.SphereGeometry(BODY.headR * 1.03, 18, 12), mHair), ID.HEAD, true); g.add(hair);
+  const eyes = [0, 1].map(() => { const e = reg(new T.Mesh(new T.SphereGeometry(.013, 6, 4), std('#141414', .3)), ID.HEAD); g.add(e); return e; });
+  const arms = [0, 1].map(() => ({ up: seg(.056, mSkin, ID.ARM), lo: seg(.046, mSkin, ID.ARM), hand: (() => { const h = reg(new T.Mesh(new T.SphereGeometry(.05, 10, 8), mGrip), ID.ARM, true); g.add(h); return h; })() }));
+  const legs = [0, 1].map(() => ({ th: seg(.078, mPant, ID.LEG), sh: seg(.058, mPant, ID.LEG), ft: (() => { const f = reg(new T.Mesh(new T.BoxGeometry(.09, .07, .24), std('#f2f2f4', .6)), ID.LEG, true); g.add(f); return f; })() }));
+  const place = (m, a, b) => { const d = b.clone().sub(a), L = d.length(); m.position.copy(a).lerp(b, .5); m.quaternion.setFromUnitVectors(V(0, 1, 0), d.normalize()); const sc = m.userData.sc; m.scale.set(sc ? sc[0] : 1, L, sc ? sc[1] : 1); };
+  const q = new T.Quaternion(), qT = new T.Quaternion();
+  let lastP = null;
+  function set(p) {
+    lastP = p;
+    q.setFromEuler(new T.Euler(p.Om, 0, 0, 'XYZ')); qT.setFromEuler(new T.Euler(0, p.tw, 0)); q.multiply(qT);
+    const W = v => v.clone().applyQuaternion(q).add(p.hips);
+    const j = p.j;
+    const S = V(0, BODY.torso, 0);
+    // 胴体（腰から肩）: カプセルは長さ 1 を伸ばすので、両端の球のぶんを引く
+    const tA = W(V(0, .1, 0)), tB = W(V(0, BODY.torso - .12, 0));
+    place(torso, tA, tB); torso.scale.y = tA.distanceTo(tB);
+    torso.quaternion.copy(q); torso.position.copy(tA).lerp(tB, .5);
+    chest.position.copy(W(V(0, BODY.torso - .14, .02))); chest.quaternion.copy(q); chest.scale.set(1.15, .9, .78);
+    pelvis.position.copy(W(V(0, .02, 0))); pelvis.quaternion.copy(q); pelvis.scale.set(1.15, .85, .85);
+    const Hc = S.clone().add(vg(j.neck * D2R).multiplyScalar(BODY.neck));
+    place(neck, W(S.clone().add(V(0, -.02, 0))), W(S.clone().add(vg(j.neck * D2R).multiplyScalar(.13))));
+    head.position.copy(W(Hc)); head.quaternion.copy(q); head.scale.set(.92, 1.05, 1);
+    hair.position.copy(W(Hc.clone().add(vg(j.neck * D2R).multiplyScalar(.025)).add(vg((j.neck + 90) * D2R).multiplyScalar(-.02)))); hair.quaternion.copy(q); hair.scale.set(.95, .75, .98);
+    // 目：顔の正面（体の +Z）
+    for (let s = 0; s < 2; s++) { const n = vg((j.neck + 90) * D2R).multiplyScalar(BODY.headR * .92); eyes[s].position.copy(W(Hc.clone().add(n).add(V(s ? .035 : -.035, .01, 0)))); }
+    for (let s = 0; s < 2; s++) {
+      const sx = s ? BODY.shW : -BODY.shW, sh = V(sx, BODY.torso - .04, 0), dir = vg(j.arm * D2R);
+      const el = sh.clone().add(dir.clone().multiplyScalar(BODY.arm * .5)), hd = sh.clone().add(dir.clone().multiplyScalar(BODY.arm));
+      place(arms[s].up, W(sh), W(el)); arms[s].up.scale.y = BODY.arm * .5 - .06; place(arms[s].lo, W(el), W(hd)); arms[s].lo.scale.y = BODY.arm * .5 - .06;
+      arms[s].hand.position.copy(W(hd));
+      const hx = s ? BODY.hipW : -BODY.hipW, hp = V(hx, -.04, 0), thD = vg((180 - j.pike) * D2R), kn = hp.clone().add(thD.clone().multiplyScalar(BODY.thigh));
+      const shD = vg((180 - j.pike + j.knee) * D2R), ft = kn.clone().add(shD.clone().multiplyScalar(BODY.shin));
+      place(legs[s].th, W(hp), W(kn)); legs[s].th.scale.y = BODY.thigh - .1; place(legs[s].sh, W(kn), W(ft)); legs[s].sh.scale.y = BODY.shin - .08;
+      legs[s].ft.position.copy(W(ft.clone().add(vg((180 - j.pike + j.knee + 90) * D2R).multiplyScalar(.06)))); legs[s].ft.quaternion.copy(q).multiply(new T.Quaternion().setFromAxisAngle(V(1, 0, 0), (180 - j.pike + j.knee) * D2R - Math.PI));
+    }
+    g.updateMatrixWorld(true);
+  }
+  return { set, head, torso, get p() { return lastP; }, headWorld: () => head.position.clone(), torsoWorld: () => torso.position.clone() };
+})();
+
+// ============================================================ ボケ（薄レンズ）
+const rtColor = new T.WebGLRenderTarget(RW, RH, { minFilter: T.LinearFilter, magFilter: T.LinearFilter, type: HDR ? T.HalfFloatType : T.UnsignedByteType });
+rtColor.depthTexture = new T.DepthTexture(RW, RH);
+const rtInfo = new T.WebGLRenderTarget(IW, IH, { minFilter: T.NearestFilter, magFilter: T.NearestFilter });
+const bufA = new Uint8Array(IW * IH * 4), bufB = new Uint8Array(IW * IH * 4);
+const dofMat = new T.ShaderMaterial({
+  uniforms: { tColor: { value: rtColor.texture }, tDepth: { value: rtColor.depthTexture }, near: { value: camera.near }, far: { value: camera.far }, focusDist: { value: 10 }, focal: { value: FOCAL }, fno: { value: 2.8 }, sensorW: { value: SENSOR_W }, res: { value: new T.Vector2(RW, RH) }, maxR: { value: 18 }, seed: { value: 0 } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+  fragmentShader: `
+    uniform sampler2D tColor, tDepth; uniform float near, far, focusDist, focal, fno, sensorW, maxR, seed; uniform vec2 res; varying vec2 vUv;
+    float dist(vec2 uv){ float d = texture2D(tDepth, uv).x; return (near*far) / (far - (far-near)*d); }
+    float cocR(float d){ float s = max(focusDist, focal*1.05); float c = focal*focal/(fno*(s-focal)) * abs(d-s)/d; return min(0.5 * c / sensorW * res.x, maxR); }
+    float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233)) + seed) * 43758.5453); }
+    vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14), 0.0, 1.0); }
+    void main(){
+      float dC = dist(vUv); float rC = cocR(dC);
+      vec3 acc = texture2D(tColor, vUv).rgb; float ws = 1.0;
+      for (int i = 0; i < 64; i++) {
+        float fi = float(i); float r = sqrt((fi + 0.5) / 64.0) * maxR; float a = fi * 2.39996;
+        vec2 uv = vUv + vec2(cos(a), sin(a)) * r / res;
+        float dS = dist(uv); float rS = cocR(dS);
+        if (dS > dC) rS = min(rS, rC);
+        float w = smoothstep(r - 1.0, r + 0.5, rS);
+        acc += texture2D(tColor, uv).rgb * w; ws += w;
+      }
+      vec3 col = pow(aces(acc / ws * 1.05), vec3(1.0/2.2));
+      vec2 q = vUv - 0.5; col *= 1.0 - 0.32 * dot(q, q);
+      col += (hash(vUv * res) - 0.5) * 0.025;
+      gl_FragColor = vec4(col, 1.0);
+    }`,
+  depthTest: false, depthWrite: false
+});
+const quadScene = new T.Scene(), quadCam = new T.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+quadScene.add(new T.Mesh(new T.PlaneGeometry(2, 2), dofMat));
+const tolOf = N => COC * N / (FOCAL * FOCAL);
+
+function renderColor(focusD) {
+  dofMat.uniforms.focusDist.value = focusD; dofMat.uniforms.focal.value = FOCAL;
+  for (const m of meshes) { m.material = m.userData.disp; m.visible = true; }
+  renderer.shadowMap.needsUpdate = true;
+  renderer.setRenderTarget(rtColor); renderer.render(scene, camera);
+  renderer.setRenderTarget(null); renderer.render(quadScene, quadCam);
+}
+// 情報パス：①場面全体（隠れ方込み） ②頭だけ ③胴体だけ（隠れていなければ何画素あるか）
+function infoPass(onlyId, buf) {
+  for (const m of meshes) { m.material = m.userData.info; m.visible = onlyId === null || m.userData.pid === onlyId; }
+  const bg = scene.background; scene.background = null;
+  renderer.setClearColor(0x000000, 1); renderer.setRenderTarget(rtInfo); renderer.clear(); renderer.render(scene, camera);
+  renderer.setRenderTarget(null); scene.background = bg;
+  renderer.readRenderTargetPixels(rtInfo, 0, 0, IW, IH, buf);
+  for (const m of meshes) m.visible = true;
+}
+const eng = { id: new Uint8Array(IW * IH), parts: null };
+function measureParts() {
+  infoPass(null, bufA);
+  const P = {}; for (const k of [ID.HEAD, ID.TORSO, ID.ARM, ID.LEG]) P[k] = { n: 0, zs: 0, x0: 1e9, x1: -1, y0: 1e9, y1: -1, alone: 0 };
+  for (let row = 0; row < IH; row++) for (let x = 0; x < IW; x++) {
+    const s = (row * IW + x) * 4, y = IH - 1 - row, id = bufA[s];
+    eng.id[y * IW + x] = id;
+    const p = P[id]; if (!p) continue;
+    p.n++; p.zs += (bufA[s + 1] * 256 + bufA[s + 2]) / 100;
+    if (x < p.x0) p.x0 = x; if (x > p.x1) p.x1 = x; if (y < p.y0) p.y0 = y; if (y > p.y1) p.y1 = y;
+  }
+  // 細い切れ端は検出に使えないので、上下左右も同じ部位の画素（内側の画素）だけを数える
+  const core = (get, k) => { let n = 0; for (let y = 1; y < IH - 1; y++) for (let x = 1; x < IW - 1; x++) { const i = y * IW + x; if (get(i) === k && get(i - 1) === k && get(i + 1) === k && get(i - IW) === k && get(i + IW) === k) n++; } return n; };
+  for (const k of [ID.HEAD, ID.TORSO]) { infoPass(k, bufB); P[k].alone = core(i => bufB[i * 4], k); P[k].core = core(i => eng.id[(IH - 1 - ((i / IW) | 0)) * IW + (i % IW)], k); }
+  eng.parts = P;
+}
+
+// ============================================================ AF（部位の選択とピント）
+const cfg = { thr: .3, fno: 2.8, mask: true };
+let sim;
+function newSim() { return { t: 0, frame: 0, rng: mkRng(77), lensD: 1 / 10.5, cmdQ: [1 / 10.5, 1 / 10.5, 1 / 10.5], est: null, part: 'none', cand: 'none', candN: 0, aim: null, log: [], hist: { part: [], vh: [], vt: [], lens: [], dist: [], focus: [], phase: [] }, done: false }; }
+function addLog(msg, kind) { sim.log.push({ t: sim.t, msg, kind }); }
+const PART_NAME = { head: '頭', torso: '胴体', none: 'なし' };
+function stepAF() {
+  const P = eng.parts, H = P[ID.HEAD], B = P[ID.TORSO];
+  const vh = H.alone >= 3 ? Math.min(1, H.core / H.alone) : 0, vt = B.alone >= 6 ? Math.min(1, B.core / B.alone) : 0;
+  // 部位の判定：頭 → 胴体 → なし。見えている割合がしきい値以上なら、その部位を検出できたとみなす
+  const want = vh >= cfg.thr && H.n >= 3 ? 'head' : vt >= cfg.thr && B.n >= 6 ? 'torso' : 'none';
+  // 2 コマ続いたら切り替え（1 コマのちらつきで枠が跳ばないように）
+  if (want === sim.cand) sim.candN++; else { sim.cand = want; sim.candN = 1; }
+  if (want !== sim.part && sim.candN >= 2) { addLog(`AF の部位：${PART_NAME[sim.part]} → ${PART_NAME[want]}（頭 ${Math.round(vh * 100)}%・胴体 ${Math.round(vt * 100)}% 見えている）`, want === 'head' ? 'ok' : want === 'torso' ? 'warn' : 'bad'); sim.part = want; }
+  // 測距：選んだ部位の画素の平均距離 + 位相差のノイズ
+  const tol = tolOf(cfg.fno);
+  const src = sim.part === 'head' ? H : sim.part === 'torso' ? B : null;
+  if (src && src.n) {
+    const z = src.zs / src.n, def = Math.abs(1 / z - sim.lensD), m = 1 / z + sim.rng.n(0, .25 * tol * (1 + def / (6 * tol)));
+    if (!sim.est) sim.est = { D: m, v: 0 }; else { const pred = sim.est.D + sim.est.v * DT, r = m - pred; sim.est.D = pred + .5 * r; sim.est.v = clamp(sim.est.v + .1 * r / DT, -2, 2); }
+  } else if (sim.est) { sim.est.v *= .9; sim.est.D += sim.est.v * DT; }
+  const cmd = sim.est ? sim.est.D + sim.est.v * (LAT + 1) * DT : sim.lensD;
+  sim.cmdQ.push(cmd); const tg = sim.cmdQ.shift();
+  sim.lensD += clamp(tg - sim.lensD, -MOTOR * DT, MOTOR * DT);
+  // 評価：レンズのピントが選手の胴体（の中心）に合っているか
+  const dTorso = gym.torsoWorld().applyMatrix4(camera.matrixWorldInverse).z * -1;
+  const focus = Math.abs(sim.lensD - 1 / dTorso) <= tol * 1.5;
+  sim.vh = vh; sim.vt = vt;
+  const h = sim.hist; h.part.push(sim.part); h.vh.push(vh); h.vt.push(vt); h.lens.push(sim.lensD); h.dist.push(dTorso); h.focus.push(focus); h.phase.push(phaseAt(sim.t));
+}
+function aimCamera(t) {
+  // 撮影者は選手の体の中心を、少し遅れて追う
+  const p = poseAt(t), c = p.hips.clone().add(V(0, .3, 0)).lerp(V(0, BAR_Y - .6, 0), .35);
+  if (!sim.aim) sim.aim = c.clone(); else sim.aim.lerp(c, 1 - Math.exp(-DT / .22));
+  camera.position.copy(CAM); camera.lookAt(sim.aim); camera.updateMatrixWorld();
+}
+function stepSim() {
+  if (sim.done) return;
+  gym.set(poseAt(sim.t)); aimCamera(sim.t);
+  measureParts(); stepAF();
+  sim.frame++; sim.t = sim.frame * DT; if (sim.t >= DUR) sim.done = true;
+}
+
+// ============================================================ 表示
+const ov = $('ov'), octx = ov.getContext('2d');
+const NK = { red: '#ff3426', green: '#36e05a' };
+const maskCv = document.createElement('canvas'); maskCv.width = IW; maskCv.height = IH; const mctx = maskCv.getContext('2d'); const mimg = mctx.createImageData(IW, IH);
+const MASKCOL = { [ID.HEAD]: [255, 70, 60], [ID.TORSO]: [60, 140, 255], [ID.ARM]: [250, 210, 60], [ID.LEG]: [70, 220, 120] };
+function tag(c, txt, x, y, col) {
+  c.save(); c.font = '600 15px "Noto Sans JP", sans-serif';
+  const w = c.measureText(txt).width + 10, h = 22; let ty = y - h - 3; if (ty < 36) ty = y + 3;
+  const tx = clamp(x, 2, RW - w - 2); ty = clamp(ty, 36, RH - 40 - h);
+  c.fillStyle = 'rgba(0,0,0,.58)'; c.fillRect(tx, ty, w, h); c.fillStyle = col; c.textBaseline = 'middle'; c.fillText(txt, tx + 5, ty + h / 2 + .5); c.restore();
+}
+function drawOverlay() {
+  const c = octx; c.clearRect(0, 0, RW, RH);
+  if (cfg.mask) {
+    const d = mimg.data;
+    for (let i = 0; i < IW * IH; i++) { const col = MASKCOL[eng.id[i]]; if (col) { d[i * 4] = col[0]; d[i * 4 + 1] = col[1]; d[i * 4 + 2] = col[2]; d[i * 4 + 3] = 105; } else d[i * 4 + 3] = 0; }
+    mctx.putImageData(mimg, 0, 0); c.save(); c.imageSmoothingEnabled = false; c.drawImage(maskCv, 0, 0, RW, RH); c.restore();
+  }
+  const tol = tolOf(cfg.fno), inFocus = sim.hist.focus[sim.hist.focus.length - 1];
+  const col = inFocus ? NK.green : NK.red;
+  const P = eng.parts;
+  if (sim.part !== 'none') {
+    const p = sim.part === 'head' ? P[ID.HEAD] : P[ID.TORSO];
+    if (p.n) {
+      let x0 = p.x0 * K, y0 = p.y0 * K, x1 = (p.x1 + 1) * K, y1 = (p.y1 + 1) * K;
+      const pad = sim.part === 'head' ? 4 : 6; x0 -= pad; y0 -= pad; x1 += pad; y1 += pad;
+      c.strokeStyle = col; c.lineWidth = sim.part === 'head' ? 2.6 : 2.2; c.strokeRect(x0, y0, x1 - x0, y1 - y0);
+      tag(c, `${sim.part === 'head' ? '頭' : '胴体'}に AF ${inFocus ? '合焦' : 'ピント移動中'}`, x0, y0, col);
+    }
+  }
+  // 下の撮影情報
+  const bh = 36; c.fillStyle = 'rgba(0,0,0,.6)'; c.fillRect(0, RH - bh, RW, bh);
+  c.fillStyle = '#fff'; c.textBaseline = 'middle'; c.font = '600 17px "JetBrains Mono", monospace';
+  const yb = RH - bh / 2; let x = 14;
+  const put = (t, gap) => { c.fillText(t, x, yb); x += c.measureText(t).width + gap; };
+  put('AF-C', 18); put(`${Math.round(FOCAL * 1000)}mm`, 22); put('1/1600', 22); put(`F${cfg.fno}`, 22); put('ISO 3200', 22);
+  c.textAlign = 'right'; c.fillText(sim.part === 'none' ? '部位：なし' : `部位：${PART_NAME[sim.part]}`, RW - 14, yb); c.textAlign = 'left';
+  c.font = '600 13px "Noto Sans JP", sans-serif'; const ph = `${sim.t.toFixed(2)} s　${phaseAt(sim.t)}`; const pw = c.measureText(ph).width + 12;
+  c.fillStyle = 'rgba(0,0,0,.5)'; c.fillRect(8, 8, pw, 22); c.fillStyle = '#e8efe9'; c.fillText(ph, 14, 19.5);
+}
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const tl = $('tl'), tctx = tl.getContext('2d');
+function sizeChart() { const dpr = window.devicePixelRatio || 1, w = tl.clientWidth; tl.width = Math.round(w * dpr); tl.height = Math.round(230 * dpr); tl.style.height = '230px'; tctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
+function renderChart() {
+  const w = tl.clientWidth, L = 52, R = 10, Tp = 10, PH = 120, SH = 16, G = 6;
+  tctx.clearRect(0, 0, w, 230);
+  const muted = css('--muted'), line = css('--line'), sunk = css('--sunk'), ink = css('--ink');
+  const X = f => L + (w - L - R) * f / (DUR * FPS), Y = v => Tp + PH * (1 - clamp(v, 0, 1));
+  tctx.font = '12px "Noto Sans JP", sans-serif'; tctx.textBaseline = 'middle';
+  for (const v of [0, .5, 1]) { tctx.strokeStyle = line; tctx.lineWidth = 1; tctx.beginPath(); tctx.moveTo(L, Y(v)); tctx.lineTo(w - R, Y(v)); tctx.stroke(); tctx.fillStyle = muted; tctx.textAlign = 'right'; tctx.fillText(`${v * 100}%`, L - 6, Y(v)); }
+  tctx.strokeStyle = muted; tctx.setLineDash([5, 4]); tctx.beginPath(); tctx.moveTo(L, Y(cfg.thr)); tctx.lineTo(w - R, Y(cfg.thr)); tctx.stroke(); tctx.setLineDash([]);
+  const hs = sim.hist, n = hs.part.length;
+  // 演技の区切り
+  for (const [k, s] of PHASES) { const xx = X(k * FPS); tctx.strokeStyle = line; tctx.beginPath(); tctx.moveTo(xx, Tp); tctx.lineTo(xx, Tp + PH); tctx.stroke(); }
+  for (const [arr, colv] of [[hs.vt, '--c1'], [hs.vh, '--bad']]) { tctx.strokeStyle = css(colv); tctx.lineWidth = 1.8; tctx.beginPath(); for (let i = 0; i < n; i++) { i ? tctx.lineTo(X(i), Y(arr[i])) : tctx.moveTo(X(i), Y(arr[i])); } tctx.stroke(); }
+  const PC = { head: css('--bad'), torso: css('--c1'), none: sunk };
+  [['AF 部位', i => PC[hs.part[i]]], ['ピント', i => hs.focus[i] ? css('--accent') : css('--warn')]].forEach(([nm, fn], r) => {
+    const y0 = Tp + PH + 12 + r * (SH + G);
+    tctx.fillStyle = muted; tctx.textAlign = 'right'; tctx.fillText(nm, L - 6, y0 + SH / 2);
+    tctx.fillStyle = sunk; tctx.fillRect(L, y0, w - L - R, SH);
+    let s0 = 0, col = n ? fn(0) : null;
+    for (let i = 1; i <= n; i++) { const c2 = i < n ? fn(i) : '__'; if (c2 !== col) { if (col) { tctx.fillStyle = col; tctx.fillRect(X(s0), y0, X(i) - X(s0) + .5, SH); } s0 = i; col = c2; } }
+  });
+  tctx.fillStyle = muted; tctx.textAlign = 'center';
+  const ty = Tp + PH + 12 + 2 * (SH + G) + 8;
+  for (let s = 0; s <= DUR; s += 1) tctx.fillText(`${s}`, X(s * FPS), ty);
+  if (!sim.done) { tctx.strokeStyle = ink; tctx.lineWidth = 1; tctx.beginPath(); tctx.moveTo(X(sim.frame), Tp); tctx.lineTo(X(sim.frame), ty - 8); tctx.stroke(); }
+}
+let logShown = 0, fpsEMA = 0;
+function renderStats() {
+  const h = sim.hist, n = h.part.length || 1; let a = 0, b = 0, c = 0, f = 0;
+  for (let i = 0; i < h.part.length; i++) { if (h.part[i] === 'head') a++; else if (h.part[i] === 'torso') b++; else c++; if (h.focus[i]) f++; }
+  const pct = v => `${Math.round(v * 100)}%`;
+  $('sHead').textContent = pct(a / n); $('sTorso').textContent = pct(b / n); $('sNone').textContent = pct(c / n); $('sFocus').textContent = pct(f / n);
+  $('vHead').style.width = `${Math.round(sim.vh * 100)}%`; $('vTorso').style.width = `${Math.round(sim.vt * 100)}%`;
+  $('vHeadT').textContent = pct(sim.vh); $('vTorsoT').textContent = pct(sim.vt);
+  $('thrMarkH').style.left = $('thrMarkT').style.left = `${cfg.thr * 100}%`;
+  const chip = $('statusChip');
+  chip.className = 'chip ' + (sim.part === 'head' ? 'ok' : sim.part === 'torso' ? 'warn' : '');
+  chip.textContent = sim.done ? '終了' : sim.part === 'head' ? '頭に AF' : sim.part === 'torso' ? '胴体に AF（頭が見えない）' : '枠なし（頭も胴体も見えない）';
+  $('phaseNow').textContent = phaseAt(sim.t);
+  $('sFps').textContent = fpsEMA ? `${fpsEMA.toFixed(0)} コマ/秒` : '—';
+  const ol = $('log');
+  if (logShown > sim.log.length) { ol.innerHTML = ''; logShown = 0; }
+  for (; logShown < sim.log.length; logShown++) { const e = sim.log[logShown]; const li = document.createElement('li'); li.className = 'k-' + e.kind; li.innerHTML = '<b></b><span></span>'; li.querySelector('b').textContent = e.t.toFixed(2); li.querySelector('span').textContent = e.msg; ol.appendChild(li); }
+  ol.scrollTop = ol.scrollHeight;
+}
+function show() {
+  dofMat.uniforms.fno.value = cfg.fno; dofMat.uniforms.seed.value = (sim.frame % 97) * .37;
+  gym.set(poseAt(Math.max(0, sim.t - DT))); camera.updateMatrixWorld();
+  renderColor(1 / sim.lensD); drawOverlay();
+}
+
+// ============================================================ 操作
+let playing = true, rate = 1, acc = 0, lastTs = null, tick = 0;
+function restart() { sim = newSim(); logShown = 0; $('log').innerHTML = ''; stepSim(); show(); renderChart(); renderStats(); $('play').textContent = playing ? '一時停止' : '再生'; }
+$('play').addEventListener('click', () => { if (sim.done) { playing = true; restart(); } else playing = !playing; $('play').textContent = playing ? '一時停止' : '再生'; });
+$('restart').addEventListener('click', restart);
+$('stepbtn').addEventListener('click', () => { playing = false; $('play').textContent = '再生'; if (!sim.done) { stepSim(); show(); renderChart(); renderStats(); } });
+document.querySelectorAll('input[name=rate]').forEach(r => r.addEventListener('change', e => { rate = +e.target.value; }));
+$('thr').addEventListener('input', e => { cfg.thr = +e.target.value / 100; $('thrOut').textContent = `${e.target.value}%`; restart(); });
+$('showMask').addEventListener('change', e => { cfg.mask = e.target.checked; drawOverlay(); });
+document.querySelectorAll('input[name=fno]').forEach(r => r.addEventListener('change', e => { cfg.fno = +e.target.value; restart(); }));
+document.querySelectorAll('input[name=focal]').forEach(r => r.addEventListener('change', e => { setFocal(+e.target.value / 1000); restart(); }));
+window.addEventListener('resize', () => { sizeChart(); renderChart(); });
+function loop(ts) {
+  if (lastTs === null) lastTs = ts;
+  const dt = Math.min(.1, (ts - lastTs) / 1000); lastTs = ts;
+  if (dt > 0) fpsEMA = fpsEMA ? fpsEMA * .95 + (1 / dt) * .05 : 1 / dt;
+  if (playing && !sim.done) {
+    acc += dt * rate; let n = 0;
+    while (acc >= DT && n < 2 && !sim.done) { stepSim(); acc -= DT; n++; }
+    if (acc > DT * 2) acc = DT * 2;
+    if (n) { show(); if (++tick % 3 === 0 || sim.done) { renderChart(); renderStats(); } }
+    if (sim.done) $('play').textContent = 'もう一度';
+  } else acc = 0;
+  requestAnimationFrame(loop);
+}
+sizeChart();
+if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) playing = false;
+restart();
+requestAnimationFrame(loop);
+window.__gym = {
+  trace() { const out = []; while (!sim.done) { stepSim(); out.push([sim.t.toFixed(2), sim.part, Math.round(sim.vh * 100), Math.round(sim.vt * 100), sim.hist.focus[sim.hist.focus.length - 1] ? 1 : 0]); } return out; },
+  reset(o) { Object.assign(cfg, o || {}); playing = false; restart(); },
+  advance(n) { for (let i = 0; i < n && !sim.done; i++) stepSim(); show(); renderChart(); renderStats(); return sim.done; },
+  frame(q) { const c = document.createElement('canvas'); c.width = RW; c.height = RH; const x = c.getContext('2d'); x.drawImage($('gl'), 0, 0); x.drawImage(ov, 0, 0); return c.toDataURL('image/jpeg', q || .9); },
+  get sim() { return sim; }, poseAt
+};
+})();
+
+</script>
+
+</body></html>
