@@ -1,0 +1,989 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>競馬 AF ラボ</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;600&family=Noto+Sans+JP:wght@400;500;700&display=swap">
+<style>
+/* レイアウト：左が 3D のファインダーと推移、右が AF の設定。下にしくみの説明 */
+:root {
+  --bg: #eef2f0;
+  --panel: #ffffff;
+  --sunk: #e3e9e6;
+  --ink: #18211e;
+  --muted: #5a6863;
+  --line: #d2dbd7;
+  --accent: #17834a;
+  --accent-soft: rgba(23,131,74,.14);
+  --warn: #b86400;
+  --bad: #c3302a;
+  --bad-soft: rgba(195,48,42,.12);
+  --subj: #2a66d6;
+  --focus: #d07a06;
+  --crowd: rgba(195,48,42,.13);
+  --c1: #3b6fd8; --c2: #d9822b; --c3: #8a5cc7; --c4: #1f9aa0; --c5: #d0507a; --c6: #7d8a2a; --c7: #8a8f8d;
+  --font-display: "Barlow Semi Condensed", "Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif;
+  --font-body: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", "Meiryo", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101514; --panel: #18201e; --sunk: #222b29; --ink: #e2eae6; --muted: #91a09a; --line: #2c3734;
+    --accent: #3fcd7c; --accent-soft: rgba(63,205,124,.16); --warn: #f0a23a; --bad: #ff6a5c; --bad-soft: rgba(255,106,92,.14);
+    --subj: #74a2ff; --focus: #f3a53c; --crowd: rgba(255,106,92,.14);
+    --c1: #7aa2ff; --c2: #f2a35a; --c3: #b994ee; --c4: #4fc6cc; --c5: #f07fa3; --c6: #b4c24e; --c7: #a3aaa7;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101514; --panel: #18201e; --sunk: #222b29; --ink: #e2eae6; --muted: #91a09a; --line: #2c3734;
+  --accent: #3fcd7c; --accent-soft: rgba(63,205,124,.16); --warn: #f0a23a; --bad: #ff6a5c; --bad-soft: rgba(255,106,92,.14);
+  --subj: #74a2ff; --focus: #f3a53c; --crowd: rgba(255,106,92,.14);
+  --c1: #7aa2ff; --c2: #f2a35a; --c3: #b994ee; --c4: #4fc6cc; --c5: #f07fa3; --c6: #b4c24e; --c7: #a3aaa7;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 14px; line-height: 1.65;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 40px;
+}
+.wrap { max-width: 1260px; margin: 0 auto; display: grid; gap: 18px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 20px; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(25px, 6vw, 30px); letter-spacing: .01em; margin: 0; text-wrap: balance; }
+h1 small { font-family: var(--font-mono); font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 10px; letter-spacing: .08em; }
+@media (max-width: 520px) { h1 small { display: block; margin-left: 0; } }
+header p { margin: 0; color: var(--muted); max-width: 64ch; }
+h2 { font-family: var(--font-display); font-weight: 600; font-size: 19px; margin: 0; letter-spacing: .02em; text-wrap: balance; }
+h3 { font-family: var(--font-display); font-weight: 600; font-size: 16.5px; margin: 10px 0 0; letter-spacing: .02em; }
+.label { font-family: var(--font-display); font-weight: 600; font-size: 12.5px; letter-spacing: .1em; color: var(--muted); }
+
+.main { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 920px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.col { display: grid; gap: 14px; min-width: 0; }
+
+.vf { position: relative; background: #0b0d0c; border-radius: 10px; overflow: hidden; }
+.vf canvas { display: block; width: 100%; height: auto; }
+.transport { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+button, .seg label {
+  font-family: var(--font-display); font-weight: 600; font-size: 14px; letter-spacing: .03em;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 7px;
+  padding: 6px 12px; cursor: pointer; line-height: 1.3;
+}
+button:hover, .seg label:hover { border-color: var(--muted); }
+button:disabled { opacity: .6; cursor: progress; }
+button:focus-visible, .seg input:focus-visible + label, input[type=range]:focus-visible, input[type=checkbox]:focus-visible, .switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; min-width: 88px; }
+:root[data-theme="dark"] button.primary { color: #0c1410; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) button.primary { color: #0c1410; } }
+.transport .spacer { flex: 1; }
+.chip { font-family: var(--font-display); font-weight: 600; font-size: 13px; padding: 3px 10px; border-radius: 99px; background: var(--sunk); color: var(--muted); letter-spacing: .04em; white-space: nowrap; }
+.chip.ok { background: var(--accent-soft); color: var(--accent); }
+.chip.warn { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.chip.bad { background: var(--bad-soft); color: var(--bad); }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 10px; min-width: 0; }
+.card.guard { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.cardhead { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.chart canvas, .mapc canvas { display: block; width: 100%; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--muted); }
+.legend i { display: inline-block; width: 14px; height: 10px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+.legend i.ln { height: 3px; }
+
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 520px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.stat { display: grid; gap: 2px; }
+.stat b { font-family: var(--font-mono); font-weight: 600; font-size: 21px; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.stat b.bad { color: var(--bad); }
+.stat b.ok { color: var(--accent); }
+.stat span { font-size: 12px; color: var(--muted); }
+
+.ctrl { display: grid; gap: 2px; }
+.ctrl .row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.ctrl output { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.ctrl .hint { font-size: 12px; color: var(--muted); line-height: 1.45; }
+input[type=range] { width: 100%; accent-color: var(--accent); margin: 2px 0; }
+.ticks { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); margin-top: -2px; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label { font-size: 13.5px; padding: 5px 10px; }
+.seg input:checked + label { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.desc { font-size: 13px; color: var(--muted); margin: 0; }
+.checks { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); }
+.checks label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.checks input { accent-color: var(--accent); }
+.weights { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 16px; }
+@media (max-width: 400px) { .weights { grid-template-columns: minmax(0, 1fr); } }
+.weights .ctrl label { font-size: 13px; }
+details > summary { cursor: pointer; font-family: var(--font-display); font-weight: 600; font-size: 12.5px; letter-spacing: .1em; color: var(--muted); }
+details[open] > summary { margin-bottom: 8px; }
+
+.guardlist { display: grid; gap: 12px; }
+.gitem { display: grid; gap: 4px; }
+.switch { display: flex; align-items: center; gap: 10px; cursor: pointer; font-weight: 700; }
+.switch input { position: absolute; opacity: 0; }
+.switch span.t { width: 38px; height: 22px; border-radius: 99px; background: var(--sunk); border: 1px solid var(--line); position: relative; flex: none; transition: background .15s; }
+.switch span.t::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--muted); transition: transform .15s, background .15s; }
+.switch input:checked + span.t { background: var(--accent-soft); border-color: var(--accent); }
+.switch input:checked + span.t::after { transform: translateX(16px); background: var(--accent); }
+.gitem p { margin: 0 0 0 48px; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+.gitem .ctrl { margin-left: 48px; }
+.guardbtns { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.log { font-family: var(--font-mono); font-size: 12px; max-height: 190px; overflow-y: auto; display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.log li { display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 8px; color: var(--muted); }
+.log li b { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.log li.k-bad span { color: var(--bad); }
+.log li.k-warn span { color: var(--warn); }
+.log li.k-ok span { color: var(--accent); }
+.log span { font-family: var(--font-body); }
+
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 6px; text-align: center; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+th { font-family: var(--font-display); font-weight: 600; color: var(--muted); letter-spacing: .03em; white-space: nowrap; }
+#scoreTbl { min-width: 640px; }
+#scoreTbl td { font-family: var(--font-mono); font-size: 12px; }
+#scoreTbl td.f { background: color-mix(in srgb, var(--accent) calc(var(--v) * 30%), transparent); }
+#scoreTbl th.off, #scoreTbl td.off { opacity: .35; }
+#scoreTbl td.name { text-align: left; font-family: var(--font-display); font-weight: 600; font-size: 13.5px; white-space: nowrap; }
+#scoreTbl td.name i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+#scoreTbl td.tot { text-align: left; min-width: 70px; }
+#scoreTbl td.tot .bar { height: 6px; border-radius: 3px; margin-top: 2px; }
+#scoreTbl td.judge { text-align: left; font-family: var(--font-body); font-size: 12px; white-space: nowrap; }
+#scoreTbl tr.sel td { background-color: var(--accent-soft); }
+#scoreTbl tr.sel.fan td { background-color: var(--bad-soft); }
+#scoreTbl tr.ex td:not(.judge):not(.name) { opacity: .4; text-decoration: line-through; }
+#scoreTbl tr.miss td { color: var(--muted); }
+#scoreTbl tr.sum td { text-align: left; font-family: var(--font-body); color: var(--muted); }
+.tag { font-family: var(--font-display); font-size: 11.5px; font-weight: 600; padding: 0 6px; border-radius: 99px; margin-left: 6px; letter-spacing: .03em; }
+.tag.sel { background: var(--accent); color: var(--panel); }
+.tag.pend { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+.tag.ideal { background: var(--sunk); color: var(--ink); }
+.ex-gate { color: var(--accent); }
+.ex-crowd { color: var(--accent); }
+.fanword { color: var(--bad); }
+#cmpTbl { min-width: 760px; }
+#ablTbl { min-width: 420px; max-width: 640px; }
+#ablTbl td.cell b.ok { color: var(--accent); } #ablTbl td.cell b.bad { color: var(--bad); }
+#ablTbl td.cell { font-family: var(--font-mono); } #ablTbl td.cell small { display: block; font-size: 11px; color: var(--muted); }
+#ablTbl td.sc { text-align: left; font-family: var(--font-display); font-weight: 600; font-size: 13px; }
+#cmpTbl td.cell { font-family: var(--font-mono); }
+#cmpTbl td.cell b { font-weight: 600; }
+#cmpTbl td.cell b.bad { color: var(--bad); }
+#cmpTbl td.cell b.ok { color: var(--accent); }
+#cmpTbl td.cell small { display: block; font-size: 11px; color: var(--muted); }
+#cmpTbl td.cur { outline: 2px solid var(--accent); outline-offset: -2px; }
+#cmpTbl td.sc { text-align: left; font-family: var(--font-display); font-weight: 600; font-size: 13px; white-space: nowrap; }
+.note { font-size: 12.5px; color: var(--muted); margin: 0; }
+.progress { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+
+.lower { display: grid; gap: 18px; }
+.algo p, .algo li { max-width: 78ch; }
+.algo ul, .algo ol { margin: 0; padding-left: 1.3em; display: grid; gap: 4px; }
+.algo p { margin: 0; }
+.formula { font-family: var(--font-mono); font-size: 12.5px; background: var(--sunk); border-radius: 8px; padding: 10px 12px; white-space: pre-wrap; overflow-x: auto; line-height: 1.6; }
+.flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; }
+.flow .box { background: var(--sunk); border-radius: 6px; padding: 4px 10px; }
+.flow .box.g { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.flow .arr { color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .switch span.t, .switch span.t::after { transition: none; } }
+.vf { aspect-ratio: 16 / 9; }
+.vf canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+#ov { cursor: crosshair; touch-action: manipulation; }
+.err { position: absolute; inset: 0; display: grid; place-items: center; color: #f2f2f2; font-size: 14px; padding: 16px; text-align: center; }
+
+.now { font: 600 17px var(--font-body); margin: 4px 0 10px; }
+.vis { display: grid; gap: 6px; }
+.vrow { display: grid; grid-template-columns: 9em 1fr 3.2em; align-items: center; gap: 8px; font-size: 13.5px; padding: 2px 4px; border-radius: 6px; }
+.vrow.on { background: var(--accent-soft); font-weight: 700; }
+.vrow b { font-family: var(--font-mono); text-align: right; }
+.vbar { position: relative; height: 12px; background: var(--sunk); border-radius: 4px; overflow: hidden; }
+.vbar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; }
+.vbar em { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--ink); }
+.stats.auto { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
+#maskLegend { font-size: 12.5px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>競馬 AF ラボ <small>3D RENDER · PERSON / ANIMAL PRIORITY · 60 Hz</small></h1>
+    <p>競馬の最後の直線を 3D CG で再現し、追っている馬に対して AF 枠が「騎手」と「馬」のどちらに、どの部位に出るかを確かめます。人物優先と動物優先を切り替えて比べられ、外から追い上げてくる馬に隠れたときの動きも見られます。</p>
+  </header>
+
+  <div class="main">
+    <div class="col">
+      <div class="vf" id="vfbox">
+        <canvas id="gl" width="960" height="540" aria-label="3D CG のファインダー画面"></canvas>
+        <canvas id="ov" width="960" height="540" aria-label="AF 枠と部位の色分け"></canvas>
+      </div>
+      <div class="transport">
+        <button id="play" class="primary">一時停止</button>
+        <button id="restart">最初から</button>
+        <button id="stepbtn">1コマ送り</button>
+        <div class="seg" role="radiogroup" aria-label="再生速度">
+          <input type="radio" name="rate" id="r025" value="0.25"><label for="r025">0.25×</label>
+          <input type="radio" name="rate" id="r05" value="0.5"><label for="r05">0.5×</label>
+          <input type="radio" name="rate" id="r1" value="1" checked><label for="r1">1×</label>
+        </div>
+        <span class="spacer"></span>
+        <span id="statusChip" class="chip">—</span>
+      </div>
+      <div class="checks">
+        <label><input type="checkbox" id="showMask" checked>部位の色分けを重ねる</label><span id="maskLegend"></span>
+      </div>
+
+      <div class="card chart">
+        <div class="cardhead"><h2>部位の見え方と AF 枠の推移</h2><span class="label">0〜12 秒</span></div>
+        <canvas id="tl" height="250" aria-label="部位の見えている割合、AF 枠の部位、ピントの推移"></canvas>
+        <div class="legend" id="legendBox"></div>
+      </div>
+
+      <div class="card">
+        <div class="stats auto" id="statBox"></div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card">
+        <span class="label">いまの場面</span>
+        <p class="now" id="phaseNow">—</p>
+        <div class="vis" id="visBox"></div>
+        <p class="desc">追っている馬の部位を、人物優先の順に並べています。</p>
+      </div>
+
+      <div class="card guard">
+        <span class="label">追う馬</span>
+        <div class="seg" role="radiogroup" aria-label="追う馬">
+          <input type="radio" name="opt_track" id="t3" value="3" checked><label for="t3">3 番（先頭・赤）</label>
+          <input type="radio" name="opt_track" id="t5" value="5"><label for="t5">5 番（内の 2 番手・青）</label>
+          <input type="radio" name="opt_track" id="t2" value="2"><label for="t2">2 番（馬群の中・黒）</label>
+        </div>
+        <span class="label" style="margin-top:6px">検出する被写体</span>
+        <div class="seg" role="radiogroup" aria-label="検出する被写体">
+          <input type="radio" name="opt_mode" id="mP" value="person" checked><label for="mP">人物優先</label>
+          <input type="radio" name="opt_mode" id="mA" value="animal"><label for="mA">動物優先</label>
+          <input type="radio" name="opt_mode" id="mN" value="naive"><label for="mN">人物優先（画面全体）</label>
+        </div>
+        <p class="desc"><b>人物優先</b>：追っている馬の 騎手の顔 → 騎手の頭 → 騎手の胴体 → 馬の頭 → 馬の胴体。<br><b>動物優先</b>：馬の頭 → 馬の胴体 → 騎手の顔 → 騎手の頭 → 騎手の胴体。<br><b>人物優先（画面全体）</b>：追っている騎手の顔が見えなければ、画面で一番大きく写っている別の騎手の顔へ移ります。</p>
+      </div>
+
+      <div class="card">
+        <span class="label">部位を検出できたとみなす割合 <output id="thrOut">30%</output></span>
+        <input type="range" id="thr" min="10" max="70" step="5" value="30" aria-label="検出しきい値">
+        <p class="desc">顔は「真正面から見たときの顔の面積」に対して、そのほかの部位は「隠れていなければ見える面積」に対して、今どれだけ見えているかです。</p>
+      </div>
+
+      <div class="card">
+        <span class="label">レンズ</span>
+        <div class="seg" role="radiogroup" aria-label="焦点距離"><input type="radio" name="focal" id="fl200" value="200"><label for="fl200">200mm</label><input type="radio" name="focal" id="fl300" value="300" checked><label for="fl300">300mm</label><input type="radio" name="focal" id="fl400" value="400"><label for="fl400">400mm</label></div>
+        <div class="seg" role="radiogroup" aria-label="絞り" style="margin-top:8px">
+          <input type="radio" name="fno" id="f14" value="1.4"><label for="f14">F1.4</label>
+          <input type="radio" name="fno" id="f28" value="2.8" checked><label for="f28">F2.8</label>
+          <input type="radio" name="fno" id="f56" value="5.6"><label for="f56">F5.6</label>
+        </div>
+        <p class="desc">描画速度：<span id="sFps">—</span></p>
+      </div>
+
+      <div class="card">
+        <span class="label">出来事</span>
+        <ol class="log" id="log"></ol>
+      </div>
+    </div>
+  </div>
+
+  <div class="lower">
+    <div class="card algo">
+      <h2>しくみ</h2>
+      <div class="flow" aria-label="1 コマの処理">
+        <span class="box">① 3D 描画（8 頭の馬と騎手）</span><span class="arr">→</span>
+        <span class="box">② 部位ごとの番号を読み出す</span><span class="arr">→</span>
+        <span class="box g">③ 人物優先／動物優先の順で部位を決める</span><span class="arr">→</span>
+        <span class="box">④ その部位の距離で位相差AF</span><span class="arr">→</span>
+        <span class="box">⑤ ボケを付けて表示</span>
+      </div>
+      <ul>
+        <li><b>レース</b>：最後の直線を 8 頭がカメラへ向かって秒速 15 m で走ってきます。始めは 200 m 先で小さく、終わりは 24 m まで近づきます。7 番が外（カメラ側）から追い上げ、ゴール前で 3 番に並びかけて手前に重なります。</li>
+        <li><b>馬の走り</b>：ギャロップの 4 本の脚の順番（左後ろ → 右後ろ → 左前 → 右前）と、胴体の上下動・首の振りを入れています。騎手は鐙に立ってかがみ、馬の上下動を膝で吸収するので、体はあまり揺れません。</li>
+        <li><b>騎手の顔</b>：ゴーグルを着けているので、顔として見える面積は小さめです。顔は真正面でも画面上でおよそ 27 画素角に満たないと検出できないことにしているので、遠いうちは騎手の顔が検出できず、まず馬の胴体や騎手の胴体に枠が出ます。</li>
+        <li><b>人物優先と動物優先</b>：人物優先は騎手の顔や頭に、動物優先は馬の頭に枠が出ます。近づくとピントの位置が 0.5〜1 m ほど違い、どちらに合わせるかで写真が変わります。</li>
+        <li><b>カメラ</b>：外ラチの外、地面から 2.6 m・ゴールの少し先から 300mm で、追っている馬を追います。外ラチの柱と横木も手前の遮りになります。</li>
+      </ul>
+      <h3>どこまでリアルか</h3>
+      <ul>
+        <li>馬は球とカプセルを組み合わせた形で、筋肉の動きやたてがみ・尾の揺れはありません。脚の動きは周期的な角度の台本です。</li>
+        <li>実機の動物検出は馬の目や頭を画像から推定します。ここでは CG の部位番号から正確に分かっている前提なので、取り違えは起きません。</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
+<script>
+window.AF_PHOTOS = [];
+// ============================================================ 3D AF ラボの共通エンジン
+// 競技ごとの設定 S を受け取り、描画・部位の見え方の計測・AF・表示・操作をまとめて動かす
+window.AFLAB = function (S) {
+'use strict';
+const $ = id => document.getElementById(id);
+if (!window.THREE) { $('vfbox').insertAdjacentHTML('beforeend', '<div class="err">3D エンジンを読み込めませんでした。ネットワークを確認して再読み込みしてください。</div>'); return; }
+const T = THREE;
+if (T.ColorManagement) T.ColorManagement.legacyMode = false;
+
+const RW = 960, RH = 540, IW = 320, IH = 180, K = RW / IW, FPS = 60, DT = 1 / FPS, DUR = S.DUR;
+const SENSOR_W = 0.036, COC = 0.00003, LAT = 3, MOTOR = S.motor || 1.2;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const smooth = x => { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); };
+const lerp = (a, b, u) => a + (b - a) * u;
+const D2R = Math.PI / 180;
+const V = (x, y, z) => new T.Vector3(x, y, z);
+function mkRng(seed) {
+  let a = seed >>> 0, spare = null;
+  const u = () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const n = (m, s) => { if (spare !== null) { const v = spare; spare = null; return m + s * v; } let u1 = 0; while (u1 === 0) u1 = u(); const u2 = u(), r = Math.sqrt(-2 * Math.log(u1)); spare = r * Math.sin(2 * Math.PI * u2); return m + s * r * Math.cos(2 * Math.PI * u2); };
+  return { u, n };
+}
+// ---- 姿勢（角度は度）。腰が原点・胴体が +Y・胸が +Z、yaw = 0 で +Z を向く
+// sp 胴体 [前屈, ひねり, 横倒し]、nk 首 [うなずき, 振り向き]、腕 [前に上げる, 横に上げる, 肘]、脚 [前に上げる（負で後ろ）, 横に開く, 膝]
+const P = o => Object.assign({ x: 0, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0, g: 1, att: 0, ry: 0, off: [0, 0, 0], sp: [0, 0, 0], nk: [0, 0], lA: [5, 12, 12], rA: [5, 12, 12], lL: [0, 3, 4], rL: [0, 3, 4] }, o);
+function lerpPose(a, b, u, shortYaw) {
+  const o = {};
+  for (const k in a) {
+    if (Array.isArray(a[k])) o[k] = a[k].map((v, i) => lerp(v, b[k][i], u));
+    else if (typeof a[k] !== 'number') o[k] = u < .5 ? a[k] : b[k];
+    else if (k === 'yaw' && shortYaw) { const d = ((b.yaw - a.yaw) % 360 + 540) % 360 - 180; o.yaw = a.yaw + d * u; }
+    else o[k] = lerp(a[k], b[k], u);
+  }
+  return o;
+}
+function kf(list, u) {   // [[u, {名前: 姿勢}], ...] を滑らかにつなぐ
+  if (u <= list[0][0]) return list[0][1];
+  for (let i = 1; i < list.length; i++) if (u <= list[i][0]) {
+    const [u0, a] = list[i - 1], [u1, b] = list[i], v = smooth((u - u0) / (u1 - u0)), o = {};
+    for (const k in a) o[k] = lerpPose(a[k], b[k], v);
+    return o;
+  }
+  return list[list.length - 1][1];
+}
+// 演技の要素 [{t0, t1, name, f(u, t) → {名前: 姿勢}}] を、間を補間しながら時刻 t の姿勢に
+function timeline(EL) {
+  return t => {
+    for (let i = 0; i < EL.length; i++) {
+      const e = EL[i];
+      if (t < e.t0 && i > 0) { const p = EL[i - 1], a = p.f(1, p.t1), b = e.f(0, e.t0), v = smooth((t - p.t1) / (e.t0 - p.t1)), o = {}; for (const k in a) o[k] = lerpPose(a[k], b[k], v, true); o.name = e.gapName || p.name; return o; }
+      if (t <= e.t1 || i === EL.length - 1) { const u = clamp((t - e.t0) / (e.t1 - e.t0), 0, 1), r = e.f(u, t); r.name = e.name; return r; }
+    }
+  };
+}
+
+// ============================================================ レンダラーと場面
+let renderer;
+try { renderer = new T.WebGLRenderer({ canvas: $('gl'), antialias: false, preserveDrawingBuffer: true, powerPreference: 'high-performance' }); }
+catch (e) { $('vfbox').insertAdjacentHTML('beforeend', '<div class="err">このブラウザは WebGL に対応していないため、3D の場面を表示できません。</div>'); return; }
+renderer.setPixelRatio(1); renderer.setSize(RW, RH, false);
+renderer.shadowMap.enabled = true; renderer.shadowMap.autoUpdate = false; renderer.shadowMap.type = T.PCFSoftShadowMap;
+const HDR = renderer.capabilities.isWebGL2;
+const scene = new T.Scene();
+scene.background = new T.Color(S.bg || '#07080b');
+if (S.fog) scene.fog = new T.FogExp2(S.fog[0], S.fog[1]);
+const CAM = V(...S.cam);
+let FOCAL = S.focal;
+const camera = new T.PerspectiveCamera(30, RW / RH, .3, S.far || 300);
+function setFocal(f) { FOCAL = f; camera.fov = 2 * Math.atan(SENSOR_W * 9 / 16 / 2 / f) / D2R; camera.updateProjectionMatrix(); }
+setFocal(FOCAL);
+const L = Object.assign({ hemi: ['#eef3ff', '#8a8f98', .7], key: ['#fff6ec', 2.0], keyOff: [4, 12, 7], fill: ['#cfe0ff', .6, -6, 8, 12], shadow: 5 }, S.light || {});
+scene.add(new T.HemisphereLight(L.hemi[0], L.hemi[1], L.hemi[2]));
+const key = new T.DirectionalLight(L.key[0], L.key[1]); key.castShadow = true; key.shadow.mapSize.set(2048, 2048);
+Object.assign(key.shadow.camera, { left: -L.shadow, right: L.shadow, top: L.shadow, bottom: -L.shadow, near: 1, far: 60 }); key.shadow.bias = -.0005; key.shadow.normalBias = .02;
+const fill = new T.DirectionalLight(L.fill[0], L.fill[1]); fill.position.set(L.fill[2], L.fill[3], L.fill[4]);
+scene.add(key, key.target, fill);
+
+const infoVS = `varying float vD; varying vec2 vUv; void main(){ vUv = uv; vec4 p = vec4(position,1.0);
+#ifdef USE_INSTANCING
+  p = instanceMatrix * p;
+#endif
+  vec4 mv = modelViewMatrix * p; vD = -mv.z; gl_Position = projectionMatrix * mv; }`;
+const infoFS = `uniform float uId; uniform sampler2D map; uniform float useMap; varying float vD; varying vec2 vUv; void main(){
+  if (useMap > 0.5 && texture2D(map, vUv).a < 0.5) discard;
+  float d = clamp(vD*100.0, 0.0, 65535.0); float hi = floor(d/256.0); float lo = d - hi*256.0; gl_FragColor = vec4(uId/255.0, hi/255.0, lo/255.0, 1.0); }`;
+const infoMats = {};
+function infoMat(id, side, map) {
+  const k = id + ':' + side + ':' + (map ? map.uuid : '');
+  return infoMats[k] || (infoMats[k] = new T.ShaderMaterial({ uniforms: { uId: { value: id } , map: { value: map || null }, useMap: { value: map ? 1 : 0 } }, vertexShader: infoVS, fragmentShader: infoFS, side }));
+}
+const meshes = [];
+function reg(mesh, id, cast, noInfo) { mesh.userData.noInfo = !!noInfo; mesh.userData.disp = mesh.material; mesh.userData.info = infoMat(id, mesh.material.side, mesh.material.map && mesh.material.transparent ? mesh.material.map : null); mesh.userData.pid = id; meshes.push(mesh); if (cast) mesh.castShadow = true; mesh.receiveShadow = true; return mesh; }
+const std = (c, r, extra) => new T.MeshStandardMaterial(Object.assign({ color: c, roughness: r === undefined ? .8 : r, metalness: 0 }, extra || {}));
+const asMat = (m, r) => (m && m.isMaterial) ? m : std(m, r === undefined ? .7 : r);
+function canvasTex(w, h, draw) { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); const t = new T.CanvasTexture(c); if (T.sRGBEncoding) t.encoding = T.sRGBEncoding; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t; }
+let nextId = 1; const newId = () => nextId++;
+const STATIC = 250;   // 背景（観客・床など）は 250 番台
+
+// ---- 顔（いただいた写真、または描いた顔）を頭の前の縦の面に貼る
+function coverOf(t, src) {
+  const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d'); x.drawImage(src, 0, 0, 64, 64);
+  const d = x.getImageData(0, 0, 64, 64).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] >= 128) n++; t.userData.cover = n / 4096;
+}
+const photoTexCache = {};
+function photoTex(photo) {
+  if (photoTexCache[photo.src]) return photoTexCache[photo.src];
+  const t = new T.Texture(); if (T.sRGBEncoding) t.encoding = T.sRGBEncoding; t.userData.cover = .62;
+  const im = new Image(); im.onload = () => { t.image = im; t.needsUpdate = true; coverOf(t, im); }; im.src = photo.src;
+  return (photoTexCache[photo.src] = t);
+}
+// 描いた顔（審判・騎手など、写真を使わない人）
+function drawnFace(o) {
+  const t = canvasTex(256, 256, (x, w, h) => {
+    x.clearRect(0, 0, w, h);
+    x.fillStyle = o.skin; x.beginPath(); x.ellipse(w / 2, h * .54, w * .34, h * .42, 0, 0, 7); x.fill();
+    const g = x.createRadialGradient(w / 2, h * .5, 10, w / 2, h * .5, w * .4); g.addColorStop(0, 'rgba(255,240,225,.12)'); g.addColorStop(1, 'rgba(70,35,20,.25)'); x.fillStyle = g; x.fill();
+    x.fillStyle = o.hair || '#20160f'; x.beginPath(); x.ellipse(w / 2, h * .2, w * .36, h * .17, 0, Math.PI, 2 * Math.PI); x.fill(); x.fillRect(w * .14, h * .19, w * .72, h * .06);
+    if (o.goggles) { x.fillStyle = '#20252b'; x.fillRect(w * .16, h * .4, w * .68, h * .15); x.fillStyle = 'rgba(160,190,220,.85)'; for (const s of [-1, 1]) { x.beginPath(); x.ellipse(w / 2 + s * w * .15, h * .475, w * .12, h * .06, 0, 0, 7); x.fill(); } }
+    else { x.fillStyle = '#231a16'; for (const s of [-1, 1]) { x.beginPath(); x.ellipse(w / 2 + s * w * .13, h * .48, w * .04, h * .022, 0, 0, 7); x.fill(); x.fillRect(w / 2 + s * w * .13 - w * .06, h * .43, w * .12, h * .012); } }
+    x.strokeStyle = 'rgba(110,60,45,.5)'; x.lineWidth = 3; x.beginPath(); x.moveTo(w / 2, h * .52); x.lineTo(w / 2 - 6, h * .63); x.stroke();
+    x.strokeStyle = '#8a4a40'; x.lineWidth = 4; x.beginPath(); x.moveTo(w / 2 - 18, h * .74); x.quadraticCurveTo(w / 2, h * .77, w / 2 + 18, h * .74); x.stroke();
+  });
+  coverOf(t, t.image); return t;
+}
+function numberTex(txt, fg, bg) {
+  return canvasTex(128, 128, (x, w, h) => { x.clearRect(0, 0, w, h); if (bg) { x.fillStyle = bg; x.fillRect(0, 0, w, h); } x.fillStyle = fg; x.font = 'bold 84px "Barlow Semi Condensed", sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(txt, w / 2, h / 2 + 4); });
+}
+
+// ---- 人（関節で動く、厚みのある体）
+function makePerson(o) {
+  const ids = { F: newId(), H: newId(), T: newId(), L: newId() };
+  const root = new T.Group(); root.scale.setScalar(o.s || 1); scene.add(root);
+  const th = o.thick || 1;
+  const m = k => asMat(o[k]);
+  const top = m('top'), pant = m('pant'), sleeve = m('sleeve'), skinArm = m('skinArm'), skin = asMat(o.skin, .55), leg = m('leg');
+  const seg = (parent, r, len, mat, pid) => { const ms = reg(new T.Mesh(new T.CapsuleGeometry(r, len, 6, 14), mat), pid, true); ms.position.y = -len / 2; parent.add(ms); return ms; };
+  const grp = (parent, x, y, z) => { const g = new T.Group(); g.position.set(x, y, z); parent.add(g); return g; };
+  const spine = grp(root, 0, .04, 0);
+  const tor = reg(new T.Mesh(new T.CapsuleGeometry(.125, .3, 6, 16), top), ids.T, true); tor.position.y = .24; tor.scale.set(o.tw || 1.2, 1, .78 * (o.td || 1)); spine.add(tor);
+  const chest = reg(new T.Mesh(new T.SphereGeometry(.16, 18, 14), top), ids.T, true); chest.position.set(0, .36, .01); chest.scale.set((o.tw || 1.2) * .95, .85, .8 * (o.td || 1)); spine.add(chest);
+  const pel = reg(new T.Mesh(new T.SphereGeometry(.15, 16, 12), pant), ids.T, true); pel.position.y = -.01; pel.scale.set(o.hw || 1.1, .8, .82); root.add(pel);
+  if (o.belt) { const b = reg(new T.Mesh(new T.TorusGeometry(.155, .022, 6, 24), asMat(o.belt, .6)), ids.T, true); b.rotation.x = Math.PI / 2; b.position.y = .05; b.scale.set(o.hw || 1.1, .85, 1); spine.add(b); }
+  if (o.number) for (const s of [1, -1]) { const pl = reg(new T.Mesh(new T.PlaneGeometry(.2, .2), new T.MeshStandardMaterial({ map: numberTex(o.number, o.numCol || '#fff'), transparent: true, alphaTest: .3, roughness: .6 })), ids.T); pl.position.set(0, .3, s * .118 * (o.td || 1)); if (s < 0) pl.rotation.y = Math.PI; spine.add(pl); }
+  const neck = grp(spine, 0, .5, 0);
+  { const nm = reg(new T.Mesh(new T.CapsuleGeometry(.048, .07, 4, 10), skin), ids.T, true); nm.position.y = .04; neck.add(nm); }
+  const head = grp(neck, 0, .09, 0);
+  const hairMat = asMat(o.cap || o.hair || '#1b1410', o.cap ? .4 : .65);
+  const hair = reg(new T.Mesh(new T.SphereGeometry(.102, 22, 16), hairMat), ids.H, true); hair.position.set(0, .11, -.035); hair.scale.set(.93, 1.05, 1); head.add(hair);
+  if (o.cap) { hair.scale.set(1.05, 1.0, 1.1); hair.position.set(0, .13, -.02); const peak = reg(new T.Mesh(new T.BoxGeometry(.16, .015, .07), hairMat), ids.H, true); peak.position.set(0, .14, .09); head.add(peak); }
+  if (o.bun) { const b = reg(new T.Mesh(new T.SphereGeometry(.05, 12, 10), hairMat), ids.H, true); b.position.set(0, .17, -.11); head.add(b); }
+  const tex = o.photo ? photoTex(o.photo) : drawnFace(o.drawn || { skin: o.skin });
+  const face = reg(new T.Mesh(new T.PlaneGeometry(.24, .24), new T.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: .05, color: '#ececec' })), ids.F); face.position.set(0, .115, .07); head.add(face);
+  const arms = [1, -1].map(sd => {
+    const sh = grp(spine, sd * (o.shW || .19), .44, 0); sh.rotation.order = 'XZY';
+    seg(sh, .048 * th, .2, sleeve, ids.L);
+    const el = grp(sh, 0, -.29, 0); seg(el, .04 * (o.thickFore || th), .19, skinArm, ids.L);
+    const hd = reg(new T.Mesh(new T.SphereGeometry(.042, 10, 8), skin), ids.L, true); hd.position.y = -.285; el.add(hd);
+    return { sh, el, hd, sd };
+  });
+  const shoes = o.shoes || 'shoe';
+  const legs = [1, -1].map(sd => {
+    const hp = grp(root, sd * .085, -.04, 0); hp.rotation.order = 'XZY';
+    seg(hp, .072 * th, .3, pant === leg ? pant : (o.shorts ? pant : leg), ids.L);
+    if (o.shorts) { const sh2 = reg(new T.Mesh(new T.CapsuleGeometry(.062, .14, 4, 10), leg), ids.L, true); sh2.position.y = -.3; hp.add(sh2); }
+    const kn = grp(hp, 0, -.44, 0); seg(kn, .055 * (o.thickShin || th), .3, o.shinMat ? asMat(o.shinMat) : leg, ids.L);
+    const ft = grp(kn, 0, -.42, 0);
+    let tipY = -.07;
+    if (shoes === 'skate') {
+      const boot = reg(new T.Mesh(new T.BoxGeometry(.09, .17, .24), asMat(o.boot || '#f4f4f2', .4)), ids.L, true); boot.position.set(0, -.05, .04); ft.add(boot);
+      const blade = reg(new T.Mesh(new T.BoxGeometry(.012, .05, .29), std('#c8ccd2', .2, { metalness: .9 })), ids.L, true); blade.position.set(0, -.155, .04); ft.add(blade); tipY = -.18;
+    } else if (shoes === 'bare') {
+      const f = reg(new T.Mesh(new T.BoxGeometry(.085, .05, .22), skin), ids.L, true); f.position.set(0, -.04, .06); ft.add(f);
+    } else {
+      const f = reg(new T.Mesh(new T.BoxGeometry(.1, .08, .27), asMat(o.boot || '#f2f2f2', .5)), ids.L, true); f.position.set(0, -.04, .06); ft.add(f); tipY = -.08;
+    }
+    const tip = grp(ft, 0, tipY, .04);
+    return { hp, kn, ft, tip, sd };
+  });
+  if (o.skirt) { const sk = reg(new T.Mesh(new T.CylinderGeometry(.15, .3, .25, 22, 1, true), Object.assign(top.clone(), { side: T.DoubleSide })), ids.T, true); sk.position.y = -.12; root.add(sk); }
+  if (o.jacket) { const jk = reg(new T.Mesh(new T.CylinderGeometry(.17, .2, .22, 18, 1, true), Object.assign(top.clone(), { side: T.DoubleSide })), ids.T, true); jk.scale.set(o.hw || 1.1, 1, .85); jk.position.y = -.06; root.add(jk); }
+  const tmp = V(0, 0, 0);
+  let yawNow = 0;
+  function set(p, attachTo) {
+    root.visible = p.hide ? false : true;
+    root.rotation.set(p.pitch * D2R, p.yaw * D2R, p.roll * D2R, 'YXZ');
+    spine.rotation.set(p.sp[0] * D2R, p.sp[1] * D2R, p.sp[2] * D2R, 'YXZ');
+    neck.rotation.set(p.nk[0] * .5 * D2R, p.nk[1] * .5 * D2R, 0, 'YXZ'); head.rotation.set(p.nk[0] * .5 * D2R, p.nk[1] * .5 * D2R, 0, 'YXZ');
+    for (const a of arms) { const A = a.sd > 0 ? p.lA : p.rA; a.sh.rotation.set(-A[0] * D2R, 0, a.sd * A[1] * D2R); a.el.rotation.set(-A[2] * D2R, 0, 0); }
+    for (const l of legs) { const Lg = l.sd > 0 ? p.lL : p.rL; l.hp.rotation.set(-Lg[0] * D2R, 0, l.sd * Lg[1] * D2R); l.kn.rotation.set(Lg[2] * D2R, 0, 0); l.ft.rotation.set(clamp(Lg[0] - Lg[2], -45, 55) * D2R, 0, 0); }
+    root.position.set(p.x, 0, p.z); root.updateMatrixWorld(true);
+    let y = p.y;
+    if (p.g > 0) { let mn = 1e9; for (const l of legs) { l.tip.getWorldPosition(tmp); mn = Math.min(mn, tmp.y); } y = lerp(p.y, -mn + (S.floorY || 0) + .005, p.g); }
+    root.position.y = y + (p.extraY || 0);
+    if (attachTo && p.att > 0) {
+      const q = attachTo.handsMid().add(V(p.off[0], p.off[1], p.off[2]));
+      root.position.lerp(q, p.att);
+      root.rotation.y = lerp(p.yaw, attachTo.yaw + p.ry, p.att) * D2R;
+    }
+    root.updateMatrixWorld(true);
+    yawNow = root.rotation.y / D2R;
+  }
+  const wp = o3 => o3.getWorldPosition(V(0, 0, 0));
+  return {
+    set, root, face, tex, ids, s: o.s || 1, name: o.name,
+    get yaw() { return yawNow; },
+    handsMid() { return wp(arms[0].hd).add(wp(arms[1].hd)).multiplyScalar(.5); },
+    hand(i) { return wp(arms[i].hd); },
+    torsoW() { return wp(chest).lerp(wp(pel), .4); },
+    faceW() { return wp(face); },
+    headW() { return wp(hair); },
+    pelvisW() { return root.position.clone(); },
+    faceSize: .24 * (o.s || 1)
+  };
+}
+
+// ============================================================ ボケ（薄レンズ）
+const rtColor = new T.WebGLRenderTarget(RW, RH, { minFilter: T.LinearFilter, magFilter: T.LinearFilter, type: HDR ? T.HalfFloatType : T.UnsignedByteType });
+rtColor.depthTexture = new T.DepthTexture(RW, RH);
+const rtInfo = new T.WebGLRenderTarget(IW, IH, { minFilter: T.NearestFilter, magFilter: T.NearestFilter });
+const bufA = new Uint8Array(IW * IH * 4), bufB = new Uint8Array(IW * IH * 4);
+const dofMat = new T.ShaderMaterial({
+  uniforms: { tColor: { value: rtColor.texture }, tDepth: { value: rtColor.depthTexture }, near: { value: camera.near }, far: { value: camera.far }, focusDist: { value: 10 }, focal: { value: FOCAL }, fno: { value: 2.8 }, sensorW: { value: SENSOR_W }, res: { value: new T.Vector2(RW, RH) }, maxR: { value: 18 }, seed: { value: 0 } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+  fragmentShader: `
+    uniform sampler2D tColor, tDepth; uniform float near, far, focusDist, focal, fno, sensorW, maxR, seed; uniform vec2 res; varying vec2 vUv;
+    float dist(vec2 uv){ float d = texture2D(tDepth, uv).x; return (near*far) / (far - (far-near)*d); }
+    float cocR(float d){ float s = max(focusDist, focal*1.05); float c = focal*focal/(fno*(s-focal)) * abs(d-s)/d; return min(0.5 * c / sensorW * res.x, maxR); }
+    float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233)) + seed) * 43758.5453); }
+    vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14), 0.0, 1.0); }
+    void main(){
+      float dC = dist(vUv); float rC = cocR(dC);
+      vec3 acc = texture2D(tColor, vUv).rgb; float ws = 1.0;
+      for (int i = 0; i < 64; i++) {
+        float fi = float(i); float r = sqrt((fi + 0.5) / 64.0) * maxR; float a = fi * 2.39996;
+        vec2 uv = vUv + vec2(cos(a), sin(a)) * r / res;
+        float dS = dist(uv); float rS = cocR(dS);
+        if (dS > dC) rS = min(rS, rC);
+        float w = smoothstep(r - 1.0, r + 0.5, rS);
+        acc += texture2D(tColor, uv).rgb * w; ws += w;
+      }
+      vec3 col = pow(aces(acc / ws * ${(S.exposure || 1).toFixed(2)}), vec3(1.0/2.2));
+      vec2 q = vUv - 0.5; col *= 1.0 - 0.3 * dot(q, q);
+      col += (hash(vUv * res) - 0.5) * 0.025;
+      gl_FragColor = vec4(col, 1.0);
+    }`,
+  depthTest: false, depthWrite: false
+});
+const quadScene = new T.Scene(), quadCam = new T.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+quadScene.add(new T.Mesh(new T.PlaneGeometry(2, 2), dofMat));
+const tolOf = N => COC * N / (FOCAL * FOCAL);
+function renderColor(focusD) {
+  dofMat.uniforms.focusDist.value = focusD; dofMat.uniforms.focal.value = FOCAL;
+  for (const m of meshes) { m.material = m.userData.disp; }
+  renderer.shadowMap.needsUpdate = true;
+  renderer.setRenderTarget(rtColor); renderer.render(scene, camera);
+  renderer.setRenderTarget(null); renderer.render(quadScene, quadCam);
+}
+const vis0 = new Map();
+function infoPass(only, buf) {
+  for (const m of meshes) { if (!vis0.has(m)) vis0.set(m, true); m.material = m.userData.info; m.userData.v = m.visible; if (only) m.visible = m.visible && only.has(m.userData.pid); if (m.userData.noInfo) m.visible = false; }
+  const bg = scene.background, fg = scene.fog; scene.background = null; scene.fog = null;
+  renderer.setClearColor(0x000000, 1); renderer.setRenderTarget(rtInfo); renderer.clear(); renderer.render(scene, camera);
+  renderer.setRenderTarget(null); scene.background = bg; scene.fog = fg;
+  renderer.readRenderTargetPixels(rtInfo, 0, 0, IW, IH, buf);
+  for (const m of meshes) { m.visible = m.userData.v; m.material = m.userData.disp; }
+}
+
+// ============================================================ 場面を組み立てる（競技ごと）
+const cfg = Object.assign({ thr: .3, fno: 2.8, mask: true, hold: 3 }, S.cfg || {});
+const ctx = { T, scene, camera, CAM, reg, std, canvasTex, numberTex, mkRng, P, lerpPose, kf, timeline, smooth, lerp, clamp, D2R, V, makePerson, newId, STATIC, cfg, photos: window.AF_PHOTOS || [], get sim() { return sim; }, get focal() { return FOCAL; } };
+const built = S.build(ctx);
+const TG = built.targets;    // [{key, label, color, kind: 'face'|'part', ids: [], person, group}]
+const TGK = Object.fromEntries(TG.map(t => [t.key, t]));
+const GROUPS = S.groups;     // 表示・統計のまとまり [{key, label, color, match: target => bool}]
+const groupOf = k => k === 'none' ? 'none' : (GROUPS.find(g => g.match(TGK[k], cfg)) || {}).key;
+ctx.faceN = k => (TGK[k].st || { n: 0 }).n;
+ctx.TGK = TGK;
+
+// ============================================================ 部位の見え方
+const eng = { id: new Uint8Array(IW * IH), st: null, vis: {} };
+const core = (get, set) => { let n = 0; for (let y = 1; y < IH - 1; y++) for (let x = 1; x < IW - 1; x++) { const i = y * IW + x; if (set.has(get(i)) && set.has(get(i - 1)) && set.has(get(i + 1)) && set.has(get(i - IW)) && set.has(get(i + IW))) n++; } return n; };
+function measure() {
+  infoPass(null, bufA);
+  const st = {};
+  for (let row = 0; row < IH; row++) for (let x = 0; x < IW; x++) {
+    const s = (row * IW + x) * 4, y = IH - 1 - row, id = bufA[s];
+    eng.id[y * IW + x] = id;
+    if (!id || id >= STATIC) continue;
+    let p = st[id]; if (!p) p = st[id] = { n: 0, zs: 0, x0: 1e9, x1: -1, y0: 1e9, y1: -1 };
+    p.n++; p.zs += (bufA[s + 1] * 256 + bufA[s + 2]) / 100;
+    if (x < p.x0) p.x0 = x; if (x > p.x1) p.x1 = x; if (y < p.y0) p.y0 = y; if (y > p.y1) p.y1 = y;
+  }
+  eng.st = st;
+  const vis = {}, need = S.need ? S.need(ctx) : null;
+  for (const t of TG) {
+    const agg = { n: 0, zs: 0, x0: 1e9, x1: -1, y0: 1e9, y1: -1 };
+    for (const id of t.ids) { const p = st[id]; if (!p) continue; agg.n += p.n; agg.zs += p.zs; agg.x0 = Math.min(agg.x0, p.x0); agg.x1 = Math.max(agg.x1, p.x1); agg.y0 = Math.min(agg.y0, p.y0); agg.y1 = Math.max(agg.y1, p.y1); }
+    t.st = agg;
+    if (need && !need.has(t.key)) { vis[t.key] = 0; continue; }
+    if (t.kind === 'face') {
+      // 顔：真正面から見たときの顔の画素数に対する割合（横を向く・うつむく・隠れると下がる）
+      const per = t.person, d = -per.faceW().applyMatrix4(camera.matrixWorldInverse).z, ppm = IW * FOCAL / (SENSOR_W * d);
+      const full = Math.pow(per.faceSize * ppm, 2) * (per.tex.userData.cover || .62);
+      // 真正面でも小さすぎる顔（およそ 9×9 画素未満、表示画面で 27 画素角未満）は検出できない
+      vis[t.key] = agg.n >= 4 && d > 0 && full >= (S.minFace || 50) ? Math.min(1, agg.n / full) : 0;
+    } else {
+      // 頭・胴体など：その部位だけを描いた画面と比べる。細い切れ端は数えない
+      if (!agg.n) { vis[t.key] = 0; continue; }
+      const set = new Set(t.ids);
+      infoPass(set, bufB);
+      const alone = core(i => bufB[i * 4], set), seen = core(i => eng.id[(IH - 1 - ((i / IW) | 0)) * IW + (i % IW)], set);
+      vis[t.key] = alone >= (t.minPx || 6) ? Math.min(1, seen / alone) : 0;
+    }
+  }
+  eng.vis = vis;
+}
+
+// ============================================================ AF
+let sim;
+function newSim() { return { t: 0, frame: 0, rng: mkRng(77), lensD: 1 / (S.startDist || 15), cmdQ: [], est: null, sel: 'none', cand: 'none', candN: 0, aim: null, log: [], vis: {}, name: '', hist: { sel: [], vis: [], focus: [] }, done: false, mem: {} }; }
+function addLog(msg, kind) { sim.log.push({ t: sim.t, msg, kind }); }
+const labelOf = k => k === 'none' ? '枠なし' : TGK[k].label;
+function stepAF() {
+  const vis = eng.vis;
+  const want = S.select ? S.select(vis, ctx) : (TG.find(t => vis[t.key] >= cfg.thr) || { key: 'none' }).key;
+  if (want === sim.cand) sim.candN++; else { sim.cand = want; sim.candN = 1; }
+  if (want !== sim.sel && sim.candN >= cfg.hold) {
+    const g = groupOf(want), gr = GROUPS.find(x => x.key === g);
+    addLog(`AF：${labelOf(sim.sel)} → ${labelOf(want)}`, want === 'none' ? 'bad' : gr && gr.kind ? gr.kind : 'ok');
+    sim.sel = want;
+  }
+  const tol = tolOf(cfg.fno), src = sim.sel !== 'none' ? TGK[sim.sel].st : null;
+  if (src && src.n) {
+    const z = src.zs / src.n, def = Math.abs(1 / z - sim.lensD), m = 1 / z + sim.rng.n(0, .25 * tol * (1 + def / (6 * tol)));
+    if (!sim.est) sim.est = { D: m, v: 0 }; else { const pred = sim.est.D + sim.est.v * DT, r = m - pred; sim.est.D = pred + .5 * r; sim.est.v = clamp(sim.est.v + .1 * r / DT, -2, 2); }
+  } else if (sim.est) { sim.est.v *= .9; sim.est.D += sim.est.v * DT; }
+  const cmd = sim.est ? sim.est.D + sim.est.v * (LAT + 1) * DT : sim.lensD;
+  if (!sim.cmdQ.length) sim.cmdQ = [sim.lensD, sim.lensD, sim.lensD];
+  sim.cmdQ.push(cmd); const tgD = sim.cmdQ.shift();
+  sim.lensD += clamp(tgD - sim.lensD, -MOTOR * DT, MOTOR * DT);
+  // 評価：競技ごとに決めた「合わせたい人」の位置にピントが合っているか
+  const ref = S.focusRef(sim.sel, ctx), d = -ref.clone().applyMatrix4(camera.matrixWorldInverse).z;
+  const focus = Math.abs(sim.lensD - 1 / d) <= tol * 1.5;
+  sim.vis = vis;
+  const h = sim.hist; h.sel.push(sim.sel); h.vis.push(Object.assign({}, vis)); h.focus.push(focus);
+}
+function setPose(t) { sim.name = S.step(t, ctx) || ''; }
+function aimCamera() {
+  const c = S.aim(ctx);
+  if (!sim.aim) sim.aim = c.clone(); else sim.aim.lerp(c, 1 - Math.exp(-DT / (S.aimLag || .25)));
+  const cp = S.camPos ? S.camPos(ctx) : CAM;
+  camera.position.copy(cp); camera.lookAt(sim.aim); camera.updateMatrixWorld();
+  if (S.zoom) { const f = S.zoom(ctx); if (f && Math.abs(f - FOCAL) > 1e-4) setFocal(f); }
+  key.position.copy(sim.aim).add(V(...L.keyOff)); key.target.position.copy(sim.aim); key.target.updateMatrixWorld();
+}
+function stepSim() {
+  if (sim.done) return;
+  setPose(sim.t); aimCamera();
+  measure(); stepAF();
+  sim.frame++; sim.t = sim.frame * DT; if (sim.t >= DUR) sim.done = true;
+}
+
+// ============================================================ 表示
+const ov = $('ov'), octx = ov.getContext('2d');
+const NK = { red: '#ff3426', green: '#36e05a' };
+const maskCv = document.createElement('canvas'); maskCv.width = IW; maskCv.height = IH; const mctx = maskCv.getContext('2d'); const mimg = mctx.createImageData(IW, IH);
+const hex2rgb = h => { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+const MASK = new Array(256).fill(null);
+function rebuildMask() {
+  MASK.fill(null);
+  for (const t of TG) if (t.mask) for (const id of t.ids) MASK[id] = hex2rgb(t.mask);
+  for (const [id, col] of (built.extraMask || [])) MASK[id] = hex2rgb(col);
+  if (S.mask) for (const [id, col] of S.mask(ctx)) MASK[id] = hex2rgb(col);
+}
+function tag(c, txt, x, y, col) {
+  c.save(); c.font = '600 15px "Noto Sans JP", sans-serif';
+  const w = c.measureText(txt).width + 10, h = 22; let ty = y - h - 3; if (ty < 36) ty = y + 3;
+  const tx = clamp(x, 2, RW - w - 2); ty = clamp(ty, 36, RH - 40 - h);
+  c.fillStyle = 'rgba(0,0,0,.58)'; c.fillRect(tx, ty, w, h); c.fillStyle = col; c.textBaseline = 'middle'; c.fillText(txt, tx + 5, ty + h / 2 + .5); c.restore();
+}
+function drawOverlay() {
+  const c = octx; c.clearRect(0, 0, RW, RH);
+  if (cfg.mask) {
+    const d = mimg.data;
+    for (let i = 0; i < IW * IH; i++) { const col = MASK[eng.id[i]]; if (col) { d[i * 4] = col[0]; d[i * 4 + 1] = col[1]; d[i * 4 + 2] = col[2]; d[i * 4 + 3] = 95; } else d[i * 4 + 3] = 0; }
+    mctx.putImageData(mimg, 0, 0); c.save(); c.imageSmoothingEnabled = false; c.drawImage(maskCv, 0, 0, RW, RH); c.restore();
+  }
+  if (S.overlay) S.overlay(c, ctx, { RW, RH, K });
+  const inFocus = sim.hist.focus[sim.hist.focus.length - 1], col = inFocus ? NK.green : NK.red;
+  if (sim.sel !== 'none') {
+    const t = TGK[sim.sel], p = t.st;
+    if (p && p.n) {
+      const pad = t.kind === 'face' ? 5 : 7; const x0 = p.x0 * K - pad, y0 = p.y0 * K - pad, x1 = (p.x1 + 1) * K + pad, y1 = (p.y1 + 1) * K + pad;
+      c.strokeStyle = col; c.lineWidth = 2.5; c.strokeRect(x0, y0, x1 - x0, y1 - y0);
+      tag(c, `${t.label} ${inFocus ? '合焦' : 'ピント移動中'}`, x0, y0, col);
+    }
+  }
+  const bh = 36; c.fillStyle = 'rgba(0,0,0,.6)'; c.fillRect(0, RH - bh, RW, bh);
+  c.fillStyle = '#fff'; c.textBaseline = 'middle'; c.font = '600 17px "JetBrains Mono", monospace';
+  const yb = RH - bh / 2; let x = 14;
+  const put = (t, gap) => { c.fillText(t, x, yb); x += c.measureText(t).width + gap; };
+  put('AF-C', 18); put(`${Math.round(FOCAL * 1000)}mm`, 22); put(S.shutter || '1/1000', 22); put(`F${cfg.fno}`, 22); put(S.iso || 'ISO 3200', 22);
+  c.font = '600 16px "Noto Sans JP", sans-serif'; c.textAlign = 'right'; c.fillText(`AF：${labelOf(sim.sel)}`, RW - 14, yb); c.textAlign = 'left';
+  c.font = '600 13px "Noto Sans JP", sans-serif'; const ph = `${sim.t.toFixed(2)} s　${sim.name}`; const pw = c.measureText(ph).width + 12;
+  c.fillStyle = 'rgba(0,0,0,.5)'; c.fillRect(8, 8, pw, 22); c.fillStyle = '#e8efe9'; c.fillText(ph, 14, 19.5);
+}
+const css = n => n[0] === '#' ? n : getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const tl = $('tl'), tctx = tl.getContext('2d'), CH = 250;
+let ROWS = [];         // 見え方の行・グラフに出す部位
+function sizeChart() { const dpr = window.devicePixelRatio || 1, w = tl.clientWidth; tl.width = Math.round(w * dpr); tl.height = Math.round(CH * dpr); tl.style.height = CH + 'px'; tctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
+function renderChart() {
+  const w = tl.clientWidth, Lm = 52, R = 10, Tp = 10, PH = 130, SH = 16, G = 6;
+  tctx.clearRect(0, 0, w, CH);
+  const muted = css('--muted'), line = css('--line'), sunk = css('--sunk'), ink = css('--ink');
+  const X = f => Lm + (w - Lm - R) * f / (DUR * FPS), Y = v => Tp + PH * (1 - clamp(v, 0, 1));
+  tctx.font = '12px "Noto Sans JP", sans-serif'; tctx.textBaseline = 'middle';
+  for (const v of [0, .5, 1]) { tctx.strokeStyle = line; tctx.lineWidth = 1; tctx.beginPath(); tctx.moveTo(Lm, Y(v)); tctx.lineTo(w - R, Y(v)); tctx.stroke(); tctx.fillStyle = muted; tctx.textAlign = 'right'; tctx.fillText(`${v * 100}%`, Lm - 6, Y(v)); }
+  for (const t0 of (S.marks || [])) { const xx = X(t0 * FPS); tctx.strokeStyle = line; tctx.beginPath(); tctx.moveTo(xx, Tp); tctx.lineTo(xx, Tp + PH); tctx.stroke(); }
+  tctx.strokeStyle = muted; tctx.setLineDash([5, 4]); tctx.beginPath(); tctx.moveTo(Lm, Y(cfg.thr)); tctx.lineTo(w - R, Y(cfg.thr)); tctx.stroke(); tctx.setLineDash([]);
+  const hs = sim.hist, n = hs.sel.length;
+  for (const k of ROWS) { tctx.strokeStyle = css(TGK[k].color); tctx.lineWidth = 1.6; tctx.beginPath(); for (let i = 0; i < n; i++) { const y = Y(hs.vis[i][k] || 0); i ? tctx.lineTo(X(i), y) : tctx.moveTo(X(i), y); } tctx.stroke(); }
+  const gcol = k => { const g = groupOf(k); if (g === 'none') return sunk; const gr = GROUPS.find(x => x.key === g); return gr ? css(gr.color) : muted; };
+  [['AF 部位', i => gcol(hs.sel[i])], ['ピント', i => hs.focus[i] ? css('--accent') : css('--warn')]].forEach(([nm, fn], r) => {
+    const y0 = Tp + PH + 12 + r * (SH + G);
+    tctx.fillStyle = muted; tctx.textAlign = 'right'; tctx.fillText(nm, Lm - 6, y0 + SH / 2);
+    tctx.fillStyle = sunk; tctx.fillRect(Lm, y0, w - Lm - R, SH);
+    let s0 = 0, col = n ? fn(0) : null;
+    for (let i = 1; i <= n; i++) { const c2 = i < n ? fn(i) : '__'; if (c2 !== col) { if (col) { tctx.fillStyle = col; tctx.fillRect(X(s0), y0, X(i) - X(s0) + .5, SH); } s0 = i; col = c2; } }
+  });
+  tctx.fillStyle = muted; tctx.textAlign = 'center';
+  const ty = Tp + PH + 12 + 2 * (SH + G) + 8, step = DUR > 16 ? 2 : 1;
+  for (let s = 0; s <= DUR; s += step) tctx.fillText(`${s}`, X(s * FPS), ty);
+  if (!sim.done) { tctx.strokeStyle = ink; tctx.lineWidth = 1; tctx.beginPath(); tctx.moveTo(X(sim.frame), Tp); tctx.lineTo(X(sim.frame), ty - 8); tctx.stroke(); }
+}
+// 見え方の行・統計・凡例を作る
+function buildPanels() {
+  ROWS = typeof S.rows === 'function' ? S.rows(cfg) : (S.rows || TG.map(t => t.key));
+  $('visBox').innerHTML = ROWS.map((k, i) => `<div class="vrow" id="row_${k}"><span>${i + 1}. ${TGK[k].label}</span><div class="vbar"><i id="v_${k}" style="background:${TGK[k].color[0] === '#' ? TGK[k].color : `var(${TGK[k].color})`}"></i><em id="m_${k}"></em></div><b id="vt_${k}">—</b></div>`).join('');
+  $('statBox').innerHTML = GROUPS.map(g => `<div class="stat"><b id="s_${g.key}">—</b><span>${g.label}</span></div>`).join('') + '<div class="stat"><b id="s_none">—</b><span>枠なし</span></div><div class="stat"><b id="sFocus">—</b><span>' + (S.focusLabel || '合わせたい人に合焦') + '</span></div>';
+  const cv = c => c[0] === '#' ? c : `var(${c})`;
+  $('legendBox').innerHTML = ROWS.map(k => `<span><i class="ln" style="background:${cv(TGK[k].color)}"></i>${TGK[k].label}</span>`).join('') + '<span><i class="ln" style="background:var(--muted)"></i>しきい値（点線）</span>' +
+    GROUPS.map(g => `<span><i style="background:${cv(g.color)}"></i>枠：${g.label}</span>`).join('') + '<span><i style="background:var(--accent)"></i>合焦</span><span><i style="background:var(--warn)"></i>ピントが外れている</span>';
+  if (built.maskLegend) $('maskLegend').innerHTML = built.maskLegend;
+}
+let logShown = 0, fpsEMA = 0;
+function renderStats() {
+  const h = sim.hist, n = h.sel.length || 1, cnt = { none: 0 }; let f = 0;
+  for (const g of GROUPS) cnt[g.key] = 0;
+  for (let i = 0; i < h.sel.length; i++) { const g = groupOf(h.sel[i]); cnt[g] = (cnt[g] || 0) + 1; if (h.focus[i]) f++; }
+  const pct = v => `${Math.round(v * 100)}%`;
+  for (const k in cnt) { const el = $('s_' + k); if (el) el.textContent = pct(cnt[k] / n); }
+  $('sFocus').textContent = pct(f / n);
+  for (const k of ROWS) { const v = sim.vis[k] || 0; $('v_' + k).style.width = pct(v); $('vt_' + k).textContent = pct(v); $('m_' + k).style.left = pct(cfg.thr); $('row_' + k).classList.toggle('on', sim.sel === k); }
+  const chip = $('statusChip'), g = GROUPS.find(x => x.key === groupOf(sim.sel));
+  chip.className = 'chip ' + (sim.sel === 'none' ? '' : g && g.kind === 'bad' ? 'bad' : g && g.kind === 'warn' ? 'warn' : 'ok');
+  chip.textContent = sim.done ? '終了' : sim.sel === 'none' ? '枠なし' : `${labelOf(sim.sel)}に AF`;
+  $('phaseNow').textContent = sim.name;
+  $('sFps').textContent = fpsEMA ? `${fpsEMA.toFixed(0)} コマ/秒` : '—';
+  const ol = $('log');
+  if (logShown > sim.log.length) { ol.innerHTML = ''; logShown = 0; }
+  for (; logShown < sim.log.length; logShown++) { const e = sim.log[logShown]; const li = document.createElement('li'); li.className = 'k-' + e.kind; li.innerHTML = '<b></b><span></span>'; li.querySelector('b').textContent = e.t.toFixed(2); li.querySelector('span').textContent = e.msg; ol.appendChild(li); }
+  ol.scrollTop = ol.scrollHeight;
+}
+function show() {
+  dofMat.uniforms.fno.value = cfg.fno; dofMat.uniforms.seed.value = (sim.frame % 97) * .37;
+  setPose(Math.max(0, sim.t - DT)); camera.updateMatrixWorld();
+  renderColor(1 / sim.lensD); drawOverlay();
+}
+
+// ============================================================ 操作
+let playing = true, rate = 1, acc = 0, lastTs = null, tick = 0;
+function restart() { sim = newSim(); if (S.reset) S.reset(ctx); rebuildMask(); buildPanels(); logShown = 0; $('log').innerHTML = ''; stepSim(); show(); renderChart(); renderStats(); $('play').textContent = playing ? '一時停止' : '再生'; }
+ctx.restart = restart;
+$('play').addEventListener('click', () => { if (sim.done) { playing = true; restart(); } else playing = !playing; $('play').textContent = playing ? '一時停止' : '再生'; });
+$('restart').addEventListener('click', restart);
+$('stepbtn').addEventListener('click', () => { playing = false; $('play').textContent = '再生'; if (!sim.done) { stepSim(); show(); renderChart(); renderStats(); } });
+document.querySelectorAll('input[name=rate]').forEach(r => r.addEventListener('change', e => { rate = +e.target.value; }));
+$('thr').addEventListener('input', e => { cfg.thr = +e.target.value / 100; $('thrOut').textContent = `${e.target.value}%`; restart(); });
+$('showMask').addEventListener('change', e => { cfg.mask = e.target.checked; drawOverlay(); });
+document.querySelectorAll('input[name=fno]').forEach(r => r.addEventListener('change', e => { cfg.fno = +e.target.value; restart(); }));
+document.querySelectorAll('input[name=focal]').forEach(r => r.addEventListener('change', e => { setFocal(+e.target.value / 1000); S.focal = FOCAL; restart(); }));
+// 競技ごとの選択肢（name="opt_<設定名>" のラジオ）
+document.querySelectorAll('input[name^=opt_]').forEach(r => r.addEventListener('change', e => { const k = e.target.name.slice(4), v = e.target.value; cfg[k] = isNaN(+v) ? v : +v; if (S.onOpt) S.onOpt(k, ctx); restart(); }));
+window.addEventListener('resize', () => { sizeChart(); renderChart(); });
+function loop(ts) {
+  if (lastTs === null) lastTs = ts;
+  const dt = Math.min(.1, (ts - lastTs) / 1000); lastTs = ts;
+  if (dt > 0) fpsEMA = fpsEMA ? fpsEMA * .95 + (1 / dt) * .05 : 1 / dt;
+  if (playing && !sim.done) {
+    acc += dt * rate; let n = 0;
+    while (acc >= DT && n < 2 && !sim.done) { stepSim(); acc -= DT; n++; }
+    if (acc > DT * 2) acc = DT * 2;
+    if (n) { show(); if (++tick % 3 === 0 || sim.done) { renderChart(); renderStats(); } }
+    if (sim.done) $('play').textContent = 'もう一度';
+  } else acc = 0;
+  requestAnimationFrame(loop);
+}
+sizeChart();
+if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) playing = false;
+restart();
+requestAnimationFrame(loop);
+window.__af = {
+  reset(o) { Object.assign(cfg, o || {}); if (o && o.focal) setFocal(o.focal); playing = false; restart(); },
+  advance(n) { for (let i = 0; i < n && !sim.done; i++) stepSim(); show(); renderChart(); renderStats(); return sim.done; },
+  jump(t) { const tgt = Math.round(t * FPS); const skip = Math.max(0, tgt - 30 - sim.frame); sim.frame += skip; sim.t = sim.frame * DT; sim.aim = null; return this.advance(tgt - sim.frame); },
+  trace(keys) { const out = []; while (!sim.done) { stepSim(); out.push([+sim.t.toFixed(2), sim.sel, groupOf(sim.sel), sim.hist.focus[sim.hist.focus.length - 1] ? 1 : 0, sim.name, (keys || ROWS).map(k => Math.round((sim.vis[k] || 0) * 100))]); } return out; },
+  frame(q) { const c = document.createElement('canvas'); c.width = RW; c.height = RH; const x = c.getContext('2d'); x.drawImage($('gl'), 0, 0); x.drawImage(ov, 0, 0); return c.toDataURL('image/jpeg', q || .9); },
+  get sim() { return sim; }, cfg, ctx
+};
+};
+
+// ============================================================ 競馬：最後の直線をこちらへ向かってくる 8 頭
+(() => {
+const HORSES = [
+  // 番号, 内外の位置 x（始め→終わり）, 先頭からの差 dz（始め→終わり）, 勝負服の色, 帽子の色, 馬の毛色
+  [3, -1.5, -1.5, 0, 0, '#d42a2a', '#ffffff', '#5a3520'],
+  [5, -2.7, -2.7, -1.6, -2.6, '#1f4fbf', '#f2d434', '#3b2416'],
+  [7, .9, -.25, -6.5, .9, '#1f8a4a', '#ffffff', '#7a4a2a'],
+  [1, .2, .4, -3.6, -4.2, '#f2f2f2', '#141414', '#2a1a12'],
+  [8, 2.3, 2.1, -2.6, -6.4, '#e8781c', '#1f4fbf', '#6b3b1c'],
+  [2, -.9, -1.0, -8.2, -7.4, '#141414', '#d42a2a', '#4a2c18'],
+  [4, 1.6, 1.4, -10.4, -9.2, '#f2d434', '#141414', '#80502c'],
+  [6, -2.1, -2.2, -12.4, -13.4, '#c43c9a', '#ffffff', '#3a2216']
+];
+const DUR = 12, V0 = 15.4, ZEND = -3;
+const leadZ = t => ZEND - V0 * (DUR - t);
+const ease = u => u * u * (3 - 2 * u);
+
+AFLAB({
+  DUR, cam: [9.5, 2.6, 21], focal: .3, startDist: 200, far: 600, bg: '#b9cde0', fog: ['#c3d2e0', .0016], aimLag: .15, exposure: 1.05, motor: 1.6,
+  light: { hemi: ['#d8e8ff', '#5b6b3a', .9], key: ['#fff3df', 2.6], keyOff: [-6, 14, 8], fill: ['#cfe0ff', .5, 8, 6, 10], shadow: 6 },
+  marks: [4, 8], shutter: '1/2000', iso: 'ISO 800',
+  cfg: { track: 3, mode: 'person' },
+  focusLabel: '追っている馬（騎手）に合焦',
+  build(c) {
+    const { T, scene, reg, std, canvasTex, makePerson, STATIC, mkRng, newId } = c;
+    // ---- コース（ダート）と内外のラチ、芝、遠くの木
+    const dirt = canvasTex(512, 2048, (x, w, h) => {
+      x.fillStyle = '#9a7552'; x.fillRect(0, 0, w, h);
+      const r = mkRng(3); for (let i = 0; i < 9000; i++) { const g = r.u(); x.fillStyle = g < .5 ? `rgba(60,40,25,${r.u() * .25})` : `rgba(210,180,140,${r.u() * .2})`; x.fillRect(r.u() * w, r.u() * h, 1 + r.u() * 3, 1 + r.u() * 6); }
+      for (let i = 0; i < 60; i++) { x.strokeStyle = `rgba(70,45,28,${.08 + r.u() * .1})`; x.lineWidth = 1 + r.u() * 2; const xx = r.u() * w; x.beginPath(); x.moveTo(xx, 0); x.lineTo(xx + r.n(0, 6), h); x.stroke(); }
+    });
+    dirt.wrapS = dirt.wrapT = T.RepeatWrapping; dirt.repeat.set(1, 12);
+    const track = reg(new T.Mesh(new T.PlaneGeometry(9, 600), std('#ffffff', .95, { map: dirt })), STATIC); track.rotation.x = -Math.PI / 2; track.position.set(.25, 0, -260); scene.add(track);
+    const grass = canvasTex(256, 256, (x, w, h) => { x.fillStyle = '#4f7a34'; x.fillRect(0, 0, w, h); const r = mkRng(8); for (let i = 0; i < 3000; i++) { x.fillStyle = `rgba(${r.u() < .5 ? '30,60,20' : '120,160,70'},${r.u() * .3})`; x.fillRect(r.u() * w, r.u() * h, 1, 3); } });
+    grass.wrapS = grass.wrapT = T.RepeatWrapping; grass.repeat.set(40, 300);
+    const turf = reg(new T.Mesh(new T.PlaneGeometry(200, 700), std('#ffffff', .95, { map: grass })), STATIC); turf.rotation.x = -Math.PI / 2; turf.position.set(0, -.01, -250); scene.add(turf);
+    const railM = std('#f4f4f4', .4);
+    for (const rx of [-4.2, 4.7]) {
+      const rail = reg(new T.Mesh(new T.BoxGeometry(.08, .12, 600), railM), STATIC, true); rail.position.set(rx, 1.0, -260); scene.add(rail);
+      const N = 300, posts = new T.InstancedMesh(new T.BoxGeometry(.07, 1.0, .07), railM, N), m = new T.Matrix4();
+      for (let i = 0; i < N; i++) { m.makeTranslation(rx, .5, 30 - i * 2); posts.setMatrixAt(i, m); }
+      reg(posts, STATIC, true); scene.add(posts);
+    }
+    // 奥のスタンドと木
+    const r2 = mkRng(11), NT = 160, trees = new T.InstancedMesh(new T.SphereGeometry(1, 10, 8), std('#3d5a2a', .95), NT), m2 = new T.Matrix4();
+    for (let i = 0; i < NT; i++) { const s = 3 + r2.u() * 4; m2.compose(new T.Vector3(-60 + r2.u() * 140, s * .9, -420 - r2.u() * 80), new T.Quaternion(), new T.Vector3(s, s * 1.2, s)); trees.setMatrixAt(i, m2); }
+    reg(trees, STATIC); scene.add(trees);
+    const stand = reg(new T.Mesh(new T.BoxGeometry(160, 22, 20), std('#b8bcc2', .8)), STATIC); stand.position.set(70, 11, -330); scene.add(stand);
+    const boardTex = canvasTex(1024, 128, (x, w, h) => { x.fillStyle = '#123a2a'; x.fillRect(0, 0, w, h); x.fillStyle = '#f2f2f2'; x.font = 'bold 70px "Barlow Semi Condensed", sans-serif'; x.textBaseline = 'middle'; x.fillText('FINAL STRETCH  ·  400m', 40, 66); });
+    const board = reg(new T.Mesh(new T.PlaneGeometry(18, 2.2), std('#ffffff', .6, { map: boardTex })), STATIC); board.position.set(-40, 4, -200); board.rotation.y = .6; scene.add(board);
+    // ---- 馬と騎手
+    const horses = {};
+    for (const [num, x0, x1, dz0, dz1, silk, cap, coat] of HORSES) {
+      const ids = { HH: newId(), HB: newId(), HL: newId() };
+      const g = new T.Group(); scene.add(g);
+      const coatM = std(coat, .55), darkM = std('#1a120c', .7), hoofM = std('#2a2622', .6);
+      const sph = (sx, sy, sz, x, y, z, id, mat) => { const m = reg(new T.Mesh(new T.SphereGeometry(1, 20, 14), mat || coatM), id, true); m.scale.set(sx, sy, sz); m.position.set(x, y, z); g.add(m); return m; };
+      const body = new T.Group(); g.add(body);
+      const bsph = (sx, sy, sz, x, y, z, id, mat) => { const m = sph(sx, sy, sz, x, y, z, id, mat); g.remove(m); body.add(m); return m; };
+      bsph(.34, .38, .95, 0, 1.3, 0, ids.HB); bsph(.33, .43, .42, 0, 1.33, .6, ids.HB); bsph(.36, .43, .44, 0, 1.36, -.62, ids.HB);
+      const cloth = reg(new T.Mesh(new T.BoxGeometry(.72, .42, .62), std('#f4f4f4', .7, { map: c.numberTex(String(num), '#141414', '#f4f4f4') })), ids.HB, true); cloth.position.set(0, 1.42, -.05); body.add(cloth);
+      const neck = new T.Group(); neck.position.set(0, 1.5, .78); body.add(neck);
+      const nm = reg(new T.Mesh(new T.CapsuleGeometry(.17, .55, 6, 12), coatM), ids.HB, true); nm.position.set(0, .26, .2); nm.rotation.x = .65; neck.add(nm);
+      const mane = reg(new T.Mesh(new T.BoxGeometry(.05, .12, .62), darkM), ids.HB); mane.position.set(0, .4, .05); mane.rotation.x = -.95; neck.add(mane);
+      const head = new T.Group(); head.position.set(0, .55, .45); neck.add(head);
+      const hm = reg(new T.Mesh(new T.CapsuleGeometry(.11, .38, 6, 12), coatM), ids.HH, true); hm.position.set(0, -.12, .2); hm.rotation.x = 2.0; hm.scale.set(.9, 1, 1.15); head.add(hm);
+      const blaze = reg(new T.Mesh(new T.BoxGeometry(.05, .02, .3), std('#f2f2f0', .6)), ids.HH); blaze.position.set(0, -.04, .3); blaze.rotation.x = -.42; head.add(blaze);
+      for (const s of [-1, 1]) { const ear = reg(new T.Mesh(new T.ConeGeometry(.035, .13, 6), coatM), ids.HH, true); ear.position.set(s * .06, .06, .02); ear.rotation.x = -.3; head.add(ear); const eye = reg(new T.Mesh(new T.SphereGeometry(.022, 8, 6), std('#0c0a08', .2)), ids.HH); eye.position.set(s * .1, -.02, .14); head.add(eye); }
+      const tail = reg(new T.Mesh(new T.CapsuleGeometry(.07, .55, 4, 8), darkM), ids.HB, true); tail.position.set(0, 1.25, -1.15); tail.rotation.x = -.5; body.add(tail);
+      const legs = [];
+      for (const [lx, lz, front, off] of [[-.17, .66, 1, .5], [.17, .66, 1, .62], [-.18, -.66, 0, 0], [.18, -.66, 0, .11]]) {
+        const hip = new T.Group(); hip.position.set(lx, 1.15, lz); body.add(hip);
+        const up = reg(new T.Mesh(new T.CapsuleGeometry(front ? .075 : .1, .4, 4, 10), coatM), ids.HL, true); up.position.y = -.25; hip.add(up);
+        const knee = new T.Group(); knee.position.y = -.52; hip.add(knee);
+        const lo = reg(new T.Mesh(new T.CapsuleGeometry(.045, .46, 4, 8), coatM), ids.HL, true); lo.position.y = -.27; knee.add(lo);
+        const hoof = reg(new T.Mesh(new T.CylinderGeometry(.055, .065, .08, 10), hoofM), ids.HL, true); hoof.position.y = -.55; knee.add(hoof);
+        legs.push({ hip, knee, front, off });
+      }
+      const jockey = makePerson({ name: 'J' + num, s: .82, skin: '#d6a882', drawn: { skin: '#d6a882', hair: cap, goggles: true }, cap, top: std(silk, .5), sleeve: std(silk, .5), skinArm: std(silk, .5), pant: std('#f2f2f2', .7), leg: std('#f2f2f2', .7), shinMat: '#141414', boot: '#141414', tw: 1.05, hw: 1.0 });
+      horses[num] = { num, g, body, neck, head, legs, ids, jockey, x0, x1, dz0, dz1, ph0: (num * .37) % 1 };
+    }
+    c.horses = horses;
+    const tg = [];
+    for (const k in horses) {
+      const h = horses[k], j = h.jockey;
+      tg.push({ key: `J${k}_F`, label: `${k} 番 騎手の顔`, kind: 'face', ids: [j.ids.F], person: j, color: '#ff3c46', who: +k, part: 'JF' });
+      tg.push({ key: `J${k}_H`, label: `${k} 番 騎手の頭`, kind: 'part', ids: [j.ids.F, j.ids.H], person: j, color: '#ff8a4c', who: +k, part: 'JH' });
+      tg.push({ key: `J${k}_T`, label: `${k} 番 騎手の胴体`, kind: 'part', ids: [j.ids.T], person: j, color: '#f2c230', who: +k, part: 'JT' });
+      tg.push({ key: `H${k}_H`, label: `${k} 番 馬の頭`, kind: 'part', ids: [h.ids.HH], person: j, color: '#3c78ff', who: +k, part: 'HH', minPx: 3 });
+      tg.push({ key: `H${k}_B`, label: `${k} 番 馬の胴体`, kind: 'part', ids: [h.ids.HB], person: j, color: '#1fb5bf', who: +k, part: 'HB' });
+    }
+    return { targets: tg, maskLegend: '<b style="color:#ff3c46">騎手の顔</b>・<b style="color:#ff8a4c">頭</b>・<b style="color:#f2c230">胴体</b>／<b style="color:#3c78ff">馬の頭</b>・<b style="color:#1fb5bf">胴体</b>（追っている馬だけ）／<b style="color:#9aa3ad">ほかの馬</b>' };
+  },
+  mask(c) {
+    const h = c.horses[c.cfg.track], j = h.jockey, out = [[j.ids.F, '#ff3c46'], [j.ids.H, '#ff8a4c'], [j.ids.T, '#f2c230'], [h.ids.HH, '#3c78ff'], [h.ids.HB, '#1fb5bf']];
+    for (const k in c.horses) if (+k !== c.cfg.track) { const o = c.horses[k]; out.push([o.ids.HH, '#9aa3ad'], [o.jockey.ids.F, '#9aa3ad']); }
+    return out;
+  },
+  need(c) {
+    const me = c.cfg.track, s = new Set([`J${me}_F`, `J${me}_H`, `J${me}_T`, `H${me}_H`, `H${me}_B`]);
+    if (c.cfg.mode === 'naive') for (const k in c.horses) { s.add(`J${k}_F`); s.add(`H${k}_H`); }
+    return s;
+  },
+  rows: f => [`J${f.track}_F`, `J${f.track}_H`, `J${f.track}_T`, `H${f.track}_H`, `H${f.track}_B`],
+  groups: [
+    { key: 'jF', label: '騎手の顔', color: '--bad', match: (t, f) => t.who === f.track && t.part === 'JF' },
+    { key: 'jH', label: '騎手の頭', color: '--c2', match: (t, f) => t.who === f.track && t.part === 'JH' },
+    { key: 'jT', label: '騎手の胴体', color: '--c6', match: (t, f) => t.who === f.track && t.part === 'JT' },
+    { key: 'hH', label: '馬の頭', color: '--c1', match: (t, f) => t.who === f.track && t.part === 'HH' },
+    { key: 'hB', label: '馬の胴体', color: '--c4', match: (t, f) => t.who === f.track && t.part === 'HB' },
+    { key: 'other', label: '別の馬・騎手', color: '--c3', kind: 'bad', match: (t, f) => t.who !== f.track }
+  ],
+  select(vis, c) {
+    const thr = c.cfg.thr, me = c.cfg.track, ok = k => vis[k] >= thr;
+    const P = [`J${me}_F`, `J${me}_H`, `J${me}_T`], A = [`H${me}_H`, `H${me}_B`];
+    if (c.cfg.mode === 'animal') return A.concat(P).find(ok) || 'none';
+    if (c.cfg.mode === 'person') return P.concat(A).find(ok) || 'none';
+    // 人物優先・画面全体：追っている騎手の顔が見えなければ、画面で一番大きい騎手の顔へ
+    if (ok(P[0])) return P[0];
+    const faces = Object.keys(c.horses).filter(k => +k !== me).map(k => `J${k}_F`).filter(ok).sort((a, b) => c.faceN(b) - c.faceN(a));
+    if (faces.length) return faces[0];
+    return P.slice(1).concat(A).find(ok) || 'none';
+  },
+  focusRef(sel, c) { return c.horses[c.cfg.track].jockey.torsoW(); },
+  aim(c) { const h = c.horses[c.cfg.track]; return h.g.position.clone().add(new THREE.Vector3(0, 1.75, .3)); },
+  onOpt(k, c) {},
+  step(t, c) {
+    const { D2R, P } = c;
+    for (const k in c.horses) {
+      const h = c.horses[k], u = ease(t / DUR);
+      const z = leadZ(t) + h.dz0 + (h.dz1 - h.dz0) * u, x = h.x0 + (h.x1 - h.x0) * u;
+      const ph = 2 * Math.PI * (2.3 * t + h.ph0);
+      h.g.position.set(x, 0, z); h.g.rotation.y = Math.atan2(h.x1 - h.x0, 140) * .5;
+      h.body.position.y = .07 * Math.sin(2 * ph); h.body.rotation.x = -.06 * Math.sin(ph);
+      h.neck.rotation.x = .14 * Math.sin(ph + .6); h.head.rotation.x = -.1 * Math.sin(ph + .6);
+      for (const L of h.legs) {
+        const p = ph + 2 * Math.PI * L.off, sw = Math.sin(p);
+        L.hip.rotation.x = (L.front ? .55 : .5) * sw + (L.front ? .05 : -.05);
+        const fold = Math.max(0, Math.cos(p));
+        L.knee.rotation.x = L.front ? 1.25 * fold : -1.1 * fold;
+      }
+      h.g.updateMatrixWorld(true);
+      // 騎手：鐙に立ってかがむ。馬の上下動を膝で吸収するので、体はあまり揺れない
+      const seat = new THREE.Vector3(0, 1.98 - .7 * .07 * Math.sin(2 * ph), .25).applyMatrix4(h.g.matrixWorld);
+      const pump = Math.sin(ph + .6);
+      h.jockey.set(P({ x: seat.x, z: seat.z, y: seat.y, g: 0, yaw: h.g.rotation.y / D2R, sp: [68, 0, 0], nk: [-58, 0], lA: [78 + 10 * pump, 6, 70 - 20 * pump], rA: [78 + 10 * pump, 6, 70 - 20 * pump], lL: [105, 22, 140], rL: [105, 22, 140] }));
+    }
+    return t < 4 ? '直線の入口（まだ 150 m 以上遠い）' : t < 8 ? '7 番が外から追い上げる' : 'ゴール前（7 番が 3 番に並びかける）';
+  }
+});
+})();
+
+</script>
+
+</body></html>

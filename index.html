@@ -1,12 +1,270 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>focus-test1</title>
-<meta http-equiv="refresh" content="0; url=./focus-test1.html">
-<link rel="canonical" href="./focus-test1.html">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AF 実験ラボ 目次</title>
+<meta name="description" content="オートフォーカス（AF）の挙動を検証する HTML 実験ページの目次です。">
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ink: #1d2128;
+    --muted: #6b7280;
+    --line: #e3e6ea;
+    --accent: #2f6df6;
+    --accent-soft: #eaf1ff;
+    --radius: 14px;
+    --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 8px 24px rgba(16, 24, 40, .06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171c;
+      --card: #1c2027;
+      --ink: #e8eaee;
+      --muted: #9aa3af;
+      --line: #2c323b;
+      --accent: #7aa2ff;
+      --accent-soft: #1e2a44;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    padding: 40px 20px 64px;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+    line-height: 1.7;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; }
+  header { margin-bottom: 32px; }
+  h1 {
+    margin: 0 0 8px;
+    font-size: clamp(24px, 4vw, 34px);
+    letter-spacing: .01em;
+  }
+  header p { margin: 0; color: var(--muted); font-size: 14.5px; }
+  .group { margin-top: 36px; }
+  .group > h2 {
+    margin: 0 0 14px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .item { display: flex; }
+  .item a {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+    padding: 16px 18px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    color: inherit;
+    text-decoration: none;
+    transition: border-color .15s ease, transform .15s ease;
+  }
+  .item a:hover,
+  .item a:focus-visible {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+    outline: none;
+  }
+  .item a:focus-visible { box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow); }
+  .title {
+    font-weight: 700;
+    font-size: 16px;
+    line-height: 1.45;
+  }
+  .title .no {
+    display: inline-block;
+    min-width: 1.6em;
+    margin-right: .45em;
+    padding: 0 .35em;
+    border-radius: 6px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 12.5px;
+    font-weight: 700;
+    text-align: center;
+    vertical-align: 1px;
+  }
+  .desc { margin: 0; color: var(--muted); font-size: 13.5px; }
+  .tag {
+    align-self: flex-start;
+    margin-top: 4px;
+    padding: 1px 8px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--muted);
+    font-size: 11px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    letter-spacing: .02em;
+  }
+  footer {
+    margin-top: 44px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 12.5px;
+  }
+</style>
 </head>
 <body>
-<p><a href="./focus-test1.html">Open focus-test1.html</a></p>
+<div class="wrap">
+  <header>
+    <h1>AF 実験ラボ 目次</h1>
+    <p>オートフォーカスの挙動をブラウザで確かめる実験ページ一覧です。各ページは独立して動作します。</p>
+  </header>
+
+  <section class="group">
+    <h2>基本シミュレーション</h2>
+    <ul class="list">
+      <li class="item">
+        <a href="./focus-test1.html">
+          <span class="title"><span class="no">01</span>跟踪对焦实验台</span>
+          <p class="desc">シナリオ・レンズ・位相差 AF センサー・AI 認識をすべて模擬。パラメータを変えて AF 枠と距離曲線の変化を観察する中国語の実験台。</p>
+          <span class="tag">AF-C · 60 Hz SIM</span>
+        </a>
+      </li>
+      <li class="item">
+        <a href="./focus-test2.html">
+          <span class="title"><span class="no">02</span>主被写体選択ラボ</span>
+          <p class="desc">鳥や人が複数いる画面で、9 つの手がかりの重みを変えながら「どの被写体を選ぶか」「ピントがどう移るか」を比べます。</p>
+          <span class="tag">SUBJECT SELECT · 60 Hz SIM</span>
+        </a>
+      </li>
+    </ul>
+  </section>
+
+  <section class="group">
+    <h2>観客・競技シーンの対策</h2>
+    <ul class="list">
+      <li class="item">
+        <a href="./focus-test3.html">
+          <span class="title"><span class="no">03</span>観客AF対策ラボ</span>
+          <p class="desc">観客席のくっきりした顔にピントが飛ぶ原因を再現し、距離ゲート・観客判定・見失い時の周辺探索という 3 つの対策の効果を確認します。</p>
+          <span class="tag">CROWD GUARD · 60 Hz SIM</span>
+        </a>
+      </li>
+      <li class="item">
+        <a href="./focus-test4.html">
+          <span class="title"><span class="no">04</span>相撲AFラボ</span>
+          <p class="desc">直径 4.55 m の土俵。入れ替わる 2 人の力士、行司、砂かぶりの観客の中から、力士にピントを合わせ続ける方法を確かめます。</p>
+          <span class="tag">DOHYO GUARD · 60 Hz SIM</span>
+        </a>
+      </li>
+      <li class="item">
+        <a href="./focus-test5.html">
+          <span class="title"><span class="no">05</span>観客AF対策ラボ（主役追跡版）</span>
+          <p class="desc">3 つの対策に加えて、選んだ主役を再識別して最後まで追い続ける「主役追跡」の効果を検証する版です。</p>
+          <span class="tag">CROWD GUARD · RE-ID</span>
+        </a>
+      </li>
+      <li class="item">
+        <a href="./focus-test6.html">
+          <span class="title"><span class="no">06</span>相撲AFラボ（クリック追跡版）</span>
+          <p class="desc">画面クリックで追う人物を指定できる版。行司判定と相撲モード（組み追跡）の挙動を比較できます。</p>
+          <span class="tag">DOHYO GUARD · CLICK START</span>
+        </a>
+      </li>
+      <li class="item">
+        <a href="./focus-test7.html">
+          <span class="title"><span class="no">07</span>シーン判別AFラボ</span>
+          <p class="desc">画面の色・線・人の動き方・姿勢から競技（100m 走・競泳・サッカー・相撲）を判別し、競技別ルールで追う相手を自動で決めます。</p>
+          <span class="tag">SCENE-AWARE AF · 60 Hz SIM</span>
+        </a>
+      </li>
+      <li class="item">
+        <a href="./focus-test8.html">
+          <span class="title"><span class="no">08</span>シーン判別AFラボ（クリック開始版）</span>
+          <p class="desc">クリックした選手から追跡を開始できる版。判別に使う手がかりを減らしたときの変化も比較できます。</p>
+          <span class="tag">SCENE-AWARE AF · CLICK START</span>
+        </a>
+      </li>
+      <li class="item">
+        <a href="./focus-test9.html">
+          <span class="title"><span class="no">09</span>シーン判別AFラボ（AFエリア検証版）</span>
+          <p class="desc">シーン判別に加えて「AF エリアの大きさと選手の選び方」の検証を追加した版です。</p>
+          <span class="tag">SCENE-AWARE AF · AF AREA</span>
+        </a>
+      </li>
+    </ul>
+  </section>
+
+  <section class="group">
+    <h2>3D CG ラボ</h2>
+    <ul class="list">
+      <li class="item">
+        <a href="./focus-test10.html">
+          <span class="title"><span class="no">10</span>100m 走 CG ラボ</span>
+          <p class="desc">太陽光・影・霧・薄レンズのボケを毎コマ計算する 3D CG で、AF が画面から選手を検出してピントを合わせる様子を確認します。</p>
+          <span class="tag">3D RENDER · THIN-LENS BOKEH</span>
+        </a>
+      </li>
+      <li class="item">
+        <a href="./focus-test11.html">
+          <span class="title"><span class="no">11</span>鉄棒 AF 部位ラボ</span>
+          <p class="desc">大車輪・離れ技・シュタルダーなどで体が回転する中、頭 → 胴体の優先順位で部位ごとの AF 枠がどう出るかを確かめます。</p>
+          <span class="tag">3D RENDER · HEAD → TORSO</span>
+        </a>
+      </li>
+      <li class="item">
+        <a href="./focus-test12.html">
+          <span class="title"><span class="no">12</span>フィギュアペア AF ラボ</span>
+          <p class="desc">リフトやツイストで 2 人の体が重なる中、女性の顔 → 女性の胴体 → 男性の顔 → 男性の胴体という 4 段階優先の枠を確認します。</p>
+          <span class="tag">3D RENDER · 4-LEVEL PRIORITY</span>
+        </a>
+      </li>
+      <li class="item">
+        <a href="./focus-test13.html">
+          <span class="title"><span class="no">13</span>柔道 AF ラボ</span>
+          <p class="desc">投げや寝技で体が重なる中、顔 → 頭 → 胴体の優先で AF 枠が出る様子と、相手や主審へ枠が移るかを比較します。</p>
+          <span class="tag">3D RENDER · FACE → HEAD → TORSO</span>
+        </a>
+      </li>
+      <li class="item">
+        <a href="./focus-test14.html">
+          <span class="title"><span class="no">14</span>バスケットボール AF ラボ</span>
+          <p class="desc">13 人の選手と審判が入り乱れる攻撃 1 回分を再現し、密集や横切りで枠がほかの人の顔へ移るかを比較します。</p>
+          <span class="tag">3D RENDER · 13 PLAYERS &amp; REFS</span>
+        </a>
+      </li>
+      <li class="item">
+        <a href="./focus-test15.html">
+          <span class="title"><span class="no">15</span>競馬 AF ラボ</span>
+          <p class="desc">最後の直線で、騎手（人物）と馬（動物）のどちらを優先するかを切り替え、外から来た馬に隠れたときの AF の動きも確認します。</p>
+          <span class="tag">3D RENDER · PERSON / ANIMAL</span>
+        </a>
+      </li>
+      <li class="item">
+        <a href="./focus-test16.html">
+          <span class="title"><span class="no">16</span>フィギュアペア AF ラボ（更新版）</span>
+          <p class="desc">4 段階優先のフィギュアペア AF ラボ最新版。リフト・ツイスト・デススパイラル・スピン・スロージャンプを収録しています。</p>
+          <span class="tag">3D RENDER · LATEST</span>
+        </a>
+      </li>
+    </ul>
+  </section>
+
+  <footer>
+    各ページは単体の HTML ファイルです。外部ライブラリの読み込みなしで動作します。
+  </footer>
+</div>
 </body>
 </html>
